@@ -13,11 +13,12 @@ console.log(`Valuation as of ${asOf}\n`);
 for (const lot of holdings.bonds) {
   const r = valueLot(lot, data, asOf);
   const p = r.valuation.currentPeriod;
-  const why = p.cpiMonth ? `CPI ${p.cpiMonth} ${p.cpi}% + margin` : "fixed first year";
+  const why = p.basis ?? "fixed";
   console.log(`${lot.series} x${lot.quantity} (${lot.account}), bought ${lot.purchaseDate}`);
   console.log(`  period ${p.index}: ${p.start} → ${p.end}, ${p.rate.toFixed(2)}% (${why})`);
   console.log(`  cost           ${zl(r.cost)} zł`);
   console.log(`  value          ${zl(r.value)} zł   (${r.valuation.valuePerBond.toFixed(2)} per bond)`);
+  if (r.interestPaid) console.log(`  interest paid  ${zl(r.interestPaid)} zł`);
   console.log(`  gain           ${zl(r.gain)} zł   after Belka ${zl(r.netGain)} zł`);
   console.log(`  if redeemed now${zl(r.redemptionValue)} zł   gain after Belka ${zl(r.redemptionNetGain)} zł\n`);
 }

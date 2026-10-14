@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { valueBond, type SeriesTerms } from "../src/bonds/inflationIndexed.js";
+import { valueBond as value, type MarketData, type SeriesTerms } from "../src/bonds/bond.js";
 import { loadBondData, valueLot } from "../src/bonds/lot.js";
 import { addYears } from "../src/bonds/dates.js";
 
-const EDO1035: SeriesTerms = { firstYearRate: 6.0, margin: 2.0, earlyFee: 3.0, years: 10 };
+const EDO1035: SeriesTerms = { firstYearRate: 6.0, margin: 2.0, earlyFee: 3.0 };
 const cpi = { "2026-08": 3.4, "2027-08": -0.5 };
+const valueBond = (purchase: string, terms: SeriesTerms, c: MarketData["cpi"], asOf: string) =>
+  value("EDO", purchase, terms, { cpi: c, nbpReference: {} }, asOf);
 
 describe("EDO valuation", () => {
   it("accrues the fixed first-year rate on actual days", () => {
@@ -15,7 +17,7 @@ describe("EDO valuation", () => {
 
   it("capitalises on the anniversary and uses CPI from two months before plus margin", () => {
     const v = valueBond("2025-10-15", EDO1035, cpi, "2026-10-15");
-    expect(v.currentPeriod).toMatchObject({ index: 2, cpiMonth: "2026-08", rate: 5.4, valueAtStart: 106 });
+    expect(v.currentPeriod).toMatchObject({ index: 2, basis: "CPI 2026-08 3.4% + 2%", rate: 5.4, valueAtStart: 106 });
     expect(v.valuePerBond).toBe(106);
   });
 
