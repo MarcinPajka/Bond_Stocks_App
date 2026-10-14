@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { today, type IsoDate } from "./bonds/dates.js";
 import { loadBondData, valueLot, type BondLot, type BondLotValuation } from "./bonds/lot.js";
+import { loadCache, mergeData, refreshBondData } from "./bonds/refresh.js";
 import { fetchFxRate, fetchQuote } from "./prices/providers.js";
 import { buildPositions, type Dividend, type Instrument, type Position, type Quote, type Trade } from "./stocks/positions.js";
 
@@ -24,11 +26,48 @@ export function loadPortfolio(path: string): PortfolioFile {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
-export async function buildReport(p: PortfolioFile, opts: { offline?: boolean; asOf?: IsoDate } = {}): Promise<Report> {
+/** Where fetched bond terms, CPI and NBP rates are kept: next to the portfolio file. */
+export const cachePathFor = (portfolioPath: string) => join(dirname(portfolioPath), "market-data.cache.json");
+
+export interface ReportOptions {
+  offline?: boolean;
+  asOf?: IsoDate;
+  cachePath?: string;
+  skipPrices?: boolean;
+  /** Throw on any bond that can't be valued, instead of reporting it as a warning. */
+  strict?: boolean;
+}
+
+export async function buildReport(p: PortfolioFile, opts: ReportOptions = {}): Promise<Report> {
   const asOf = opts.asOf ?? today();
   const warnings: string[] = [];
-  const bondData = loadBondData();
-  const bonds = (p.bonds ?? []).map((lot) => valueLot(lot, bondData, asOf));
+
+  const lots = p.bonds ?? [];
+  const bundled = loadBondData();
+  let bondData = opts.cachePath ? mergeData(bundled, loadCache(opts.cachePath)) : bundled;
+  if (!opts.offline) {
+    const needed = lots.filter((l) => !l.terms).map((l) => l.series);
+    const refreshed = await refreshBondData(bundled, opts.cachePath, needed);
+    bondData = refreshed.data;
+    warnings.push(...refreshed.warnings);
+  }
+  const bonds: BondLotValuation[] = [];
+  for (const lot of lots) {
+    try {
+      const v = valueLot(lot, bondData, asOf);
+      if (v.valuation.currentPeriod.basis?.startsWith("estimated")) {
+        warnings.push(`${lot.series}: rate ${v.valuation.currentPeriod.basis}`);
+      }
+      bonds.push(v);
+    } catch (e) {
+      if (opts.strict) {
+        const related = warnings.filter((w) => w.startsWith(lot.series.toUpperCase()));
+        throw new Error(related[0] ?? `${lot.series}: ${(e as Error).message}`);
+      }
+      warnings.push(`${lot.series} bought ${lot.purchaseDate}: ${(e as Error).message}`);
+    }
+  }
+  if (opts.skipPrices) return { asOf, bonds, positions: [], warnings };
 
   const instruments = p.instruments ?? [];
   const currencyOf = (s: string) => instruments.find((i) => i.symbol === s)?.currency ?? "PLN";

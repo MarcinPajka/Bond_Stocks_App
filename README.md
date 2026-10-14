@@ -32,8 +32,12 @@ npm test
 
 ## Data
 - `data/cpi.json`: GUS y/y CPI by month (from stat.gov.pl). Add each new month as GUS publishes it.
-- `data/bond-series.json`: per-series terms from obligacjeskarbowe.pl (first-year rate, margin, early-redemption fee). For a series not listed, put `"terms": {"firstYearRate": .., "margin": .., "earlyFee": ..}` on the holding.
-- `data/nbp-reference-rate.json`: NBP reference rate changes (for ROR/DOR), by effective date.
+Bond data updates itself while the app is online, and is saved to `market-data.cache.json` next to your portfolio file:
+- **Series terms** (first-year rate, margin, early-redemption fee) are read from the series page on obligacjeskarbowe.pl the first time you add a bond of that series, so you only enter the series code, date and quantity. If a page can't be read, the app says so and you can enter the terms on the bond yourself.
+- **Inflation** comes from the GUS monthly CPI table and the **NBP reference rate** from NBP's rates XML, checked every 12 hours.
+- If a bond needs a CPI month that isn't published or downloaded yet, the latest known month is used and the bond is flagged as estimated.
+
+Bundled starting data (used offline and as a fallback): `data/bond-series.json`, `data/cpi.json`, `data/nbp-reference-rate.json`.
 
 ## Bond rules implemented (from the issue letters)
 - Year 1 fixed rate; later years CPI y/y (announced the month before the period starts, i.e. two months back) + margin, CPI below 0 counts as 0.

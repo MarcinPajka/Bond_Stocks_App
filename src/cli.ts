@@ -1,5 +1,5 @@
 // Usage: npx tsx src/cli.ts [portfolio.json] [--offline] [--date YYYY-MM-DD]
-import { buildReport, loadPortfolio } from "./portfolio.js";
+import { buildReport, cachePathFor, loadPortfolio } from "./portfolio.js";
 
 const args = process.argv.slice(2);
 const file = args.find((a) => a.endsWith(".json")) ?? "portfolio.json";
@@ -7,6 +7,7 @@ const dateIdx = args.indexOf("--date");
 const report = await buildReport(loadPortfolio(file), {
   offline: args.includes("--offline"),
   asOf: dateIdx >= 0 ? args[dateIdx + 1] : undefined,
+  cachePath: cachePathFor(file),
 });
 
 const zl = (x: number | undefined) => (x === undefined ? "—" : x.toFixed(2)).padStart(10);

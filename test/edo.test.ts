@@ -43,7 +43,10 @@ describe("EDO valuation", () => {
     expect(v.redemptionValuePerBond).toBe(102.98);
   });
 
-  it("fails loudly when CPI for a period is missing", () => {
+  it("estimates from the latest known CPI when a month is missing, and fails with none", () => {
+    const v = valueBond("2025-10-15", EDO1035, { "2026-06": 2.5 }, "2026-11-01");
+    expect(v.currentPeriod.rate).toBe(4.5);
+    expect(v.currentPeriod.basis).toMatch(/^estimated: CPI 2026-08 not in data, used 2026-06/);
     expect(() => valueBond("2025-10-15", EDO1035, {}, "2026-11-01")).toThrow(/Missing CPI for 2026-08/);
   });
 

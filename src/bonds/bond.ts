@@ -95,8 +95,17 @@ function periodRate(
     // CPI announced by GUS in the month before the period starts = figure for two months back
     const month = monthBefore(start, 2);
     const cpi = market.cpi[month];
-    if (cpi === undefined) throw new Error(`Missing CPI for ${month}, needed for the period starting ${start}`);
-    return { rate: round2(Math.max(cpi, 0) + terms.margin), basis: `CPI ${month} ${cpi}% + ${terms.margin}%` };
+    if (cpi !== undefined) {
+      return { rate: round2(Math.max(cpi, 0) + terms.margin), basis: `CPI ${month} ${cpi}% + ${terms.margin}%` };
+    }
+    // Not in the data yet: estimate with the latest month known before it.
+    const latest = Object.keys(market.cpi).filter((m) => m < month).sort().at(-1);
+    if (!latest) throw new Error(`Missing CPI for ${month}, needed for the period starting ${start}`);
+    const est = market.cpi[latest];
+    return {
+      rate: round2(Math.max(est, 0) + terms.margin),
+      basis: `estimated: CPI ${month} not in data, used ${latest} ${est}% + ${terms.margin}%`,
+    };
   }
   // NBP reference rate in force on the 10th business day before the 1st of the period's month
   const fixingDate = businessDaysBefore(start.slice(0, 8) + "01", 10);

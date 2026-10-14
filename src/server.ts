@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildReport, type PortfolioFile } from "./portfolio.js";
+import { buildReport, cachePathFor, type PortfolioFile } from "./portfolio.js";
 import { toRows } from "./view.js";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -11,6 +11,7 @@ const PORTFOLIO = process.env.PORTFOLIO ?? join(root, "portfolio.json");
 const OFFLINE = process.env.OFFLINE === "1";
 const PORT = Number(process.env.PORT ?? 5173);
 const CACHE_MS = 5 * 60_000;
+const MARKET_CACHE = cachePathFor(PORTFOLIO);
 
 const readPortfolio = (): PortfolioFile => (existsSync(PORTFOLIO) ? JSON.parse(readFileSync(PORTFOLIO, "utf8")) : {});
 
@@ -20,7 +21,7 @@ async function report(date: string | undefined, refresh: boolean) {
   const portfolio = readPortfolio();
   const key = JSON.stringify([portfolio, date]);
   if (!refresh && cache && cache.key === key && Date.now() - cache.at < CACHE_MS) return cache.body;
-  const r = await buildReport(portfolio, { offline: OFFLINE, asOf: date });
+  const r = await buildReport(portfolio, { offline: OFFLINE, asOf: date, cachePath: MARKET_CACHE });
   const names = Object.fromEntries((portfolio.instruments ?? []).map((i) => [i.symbol, i.name]));
   const body = { asOf: r.asOf, rows: toRows(r, names), warnings: r.warnings, offline: OFFLINE };
   cache = { key, at: Date.now(), body };
@@ -49,7 +50,9 @@ createServer(async (req, res) => {
     if (url.pathname === "/api/portfolio" && req.method === "GET") return send(res, 200, readPortfolio());
     if (url.pathname === "/api/portfolio" && req.method === "PUT") {
       const next: PortfolioFile = JSON.parse(await readBody(req));
-      await buildReport(next, { offline: true }); // reject data the calculators can't handle
+      // Reject data the calculators can't handle; this also fetches terms for new bond series.
+      await buildReport(next, { offline: OFFLINE, cachePath: MARKET_CACHE, skipPrices: true, strict: true });
+      await buildReport(next, { offline: true, cachePath: MARKET_CACHE, skipPrices: false });
       writeFileSync(PORTFOLIO, JSON.stringify(next, null, 2));
       cache = undefined;
       return send(res, 200, { ok: true });
