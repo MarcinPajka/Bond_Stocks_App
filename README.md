@@ -6,13 +6,18 @@ Private tracker for Polish treasury bonds, stocks/ETFs and PKO DFE, with gains s
 - Step 1 (done): bond calculator for all retail treasury bonds: OTS, ROR, DOR, TOS, COI, EDO, ROS, ROD.
 - Step 2 (done): shares and ETFs with FIFO sells, commissions, dividends, foreign currency via NBP rates, live prices from stooq.pl with Yahoo Finance as fallback.
 - Step 3 (done): per-instrument income in one report, PKO DFE priced from analizy.pl.
-- Next: the web app.
+- Step 4 (done): local web app with a dashboard, account filter, before/after Belka toggle and forms to log everything.
 
-## Try it
+## Run the app
 ```
 npm install
-cp portfolio.example.json portfolio.json   # made-up sample; replace with your own holdings
-npx tsx src/cli.ts                         # live prices, value as of today
+npm start          # open http://localhost:5173
+```
+Your data is saved to `portfolio.json` next to the code (ignored by git). Use "Load sample data" to try it with made-up holdings. The server listens on localhost only. `OFFLINE=1 npm start` skips live prices and uses the manual `prices` in the file; `PORTFOLIO=/path/file.json` uses another data file.
+
+## Command-line report
+```
+npx tsx src/cli.ts portfolio.example.json   # live prices, value as of today
 npx tsx src/cli.ts --offline               # use the "prices" in the file instead
 npx tsx src/cli.ts --date 2027-04-15       # bonds valued on another date
 npm test

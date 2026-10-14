@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "start": "tsx src/server.ts",
+    "report": "tsx src/cli.ts"
   },
   "keywords": [],
   "author": "",

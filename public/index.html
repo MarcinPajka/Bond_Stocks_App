@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Portfolio</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Portfolio</h1>
+      <p class="muted" id="asof"></p>
+    </div>
+    <div class="controls">
+      <label class="switch"><input type="checkbox" id="net"> After Belka tax</label>
+      <button id="refresh">Refresh prices</button>
+    </div>
+  </header>
+
+  <section class="cards">
+    <div class="card"><span class="muted">Value</span><strong id="tValue">–</strong></div>
+    <div class="card"><span class="muted">Invested</span><strong id="tCost">–</strong></div>
+    <div class="card"><span class="muted" id="tGainLabel">Gain</span><strong id="tGain">–</strong></div>
+    <div class="card"><span class="muted">Return</span><strong id="tReturn">–</strong></div>
+  </section>
+
+  <nav class="chips" id="accounts"></nav>
+  <div id="warnings"></div>
+
+  <div class="table-wrap">
+    <table id="holdings">
+      <thead><tr>
+        <th>Instrument</th><th>Account</th><th class="num">Qty</th><th class="num">Cost</th>
+        <th class="num">Value</th><th class="num" id="gainHead">Gain</th><th class="num">Return</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <div id="empty" hidden>
+      <p>No holdings yet. Add a bond or a trade below, or</p>
+      <button id="sample">Load sample data</button>
+    </div>
+  </div>
+
+  <section class="panel">
+    <nav class="tabs">
+      <button data-form="bond" class="active">Add bond</button>
+      <button data-form="trade">Add buy / sell</button>
+      <button data-form="dividend">Add dividend</button>
+      <button data-form="list">All entries</button>
+    </nav>
+
+    <form id="form-bond" class="grid">
+      <label>Series <input name="series" placeholder="EDO1035" required pattern="[A-Za-z]{3}\d{4}"></label>
+      <label>Purchase date <input name="purchaseDate" type="date" required></label>
+      <label>Quantity <input name="quantity" type="number" min="1" step="1" required></label>
+      <label>Price per bond <input name="pricePerBond" type="number" step="0.01" value="100"></label>
+      <label>Account <select name="account"></select></label>
+      <details class="full"><summary>Series not recognised? Enter its terms</summary>
+        <div class="grid">
+          <label>First-year rate % <input name="firstYearRate" type="number" step="0.01"></label>
+          <label>Margin % <input name="margin" type="number" step="0.01"></label>
+          <label>Early-redemption fee zł <input name="earlyFee" type="number" step="0.01"></label>
+        </div>
+      </details>
+      <button class="full">Add bond</button>
+    </form>
+
+    <form id="form-trade" class="grid" hidden>
+      <label>Symbol <input name="symbol" placeholder="CDR" required list="symbols"></label>
+      <label>Type <select name="type"><option value="buy">Buy</option><option value="sell">Sell</option></select></label>
+      <label>Date <input name="date" type="date" required></label>
+      <label>Quantity <input name="quantity" type="number" step="any" min="0" required></label>
+      <label>Price per unit <input name="price" type="number" step="any" min="0" required></label>
+      <label>Commission <input name="commission" type="number" step="0.01" value="0"></label>
+      <label>Account <select name="account"></select></label>
+      <details class="full"><summary>New instrument details</summary>
+        <div class="grid">
+          <label>Name <input name="name" placeholder="CD Projekt"></label>
+          <label>Currency <input name="currency" value="PLN" maxlength="3"></label>
+          <label>stooq symbol <input name="stooq" placeholder="cdr / vwce.de"></label>
+          <label>Yahoo symbol <input name="yahoo" placeholder="CDR.WA / VWCE.DE"></label>
+          <label>analizy.pl fund id <input name="analizy" placeholder="EBAN2 for PKO DFE"></label>
+        </div>
+      </details>
+      <button class="full">Add trade</button>
+    </form>
+
+    <form id="form-dividend" class="grid" hidden>
+      <label>Symbol <input name="symbol" required list="symbols"></label>
+      <label>Pay date <input name="date" type="date" required></label>
+      <label>Gross amount (total) <input name="gross" type="number" step="0.01" min="0" required></label>
+      <label>Tax withheld (total) <input name="withheldTax" type="number" step="0.01" min="0"></label>
+      <label>Account <select name="account"></select></label>
+      <button class="full">Add dividend</button>
+    </form>
+
+    <div id="form-list" hidden></div>
+    <datalist id="symbols"></datalist>
+    <p id="formMsg" class="muted"></p>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>

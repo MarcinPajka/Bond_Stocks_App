@@ -59,7 +59,7 @@ export async function buildReport(p: PortfolioFile, opts: { offline?: boolean; a
         else warnings.push(`${inst.symbol}: manual price needs fxRate`);
         if (!opts.offline) warnings.push(`${inst.symbol}: using manual price (${(e as Error).message})`);
       } else {
-        warnings.push(`${inst.symbol}: ${(e as Error).message}`);
+        warnings.push(opts.offline ? `${inst.symbol}: no manual price set (offline mode)` : `${inst.symbol}: ${(e as Error).message}`);
       }
     }
   }
