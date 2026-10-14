@@ -9,6 +9,13 @@ Private tracker for Polish treasury bonds, stocks/ETFs and PKO DFE, with gains s
 - Step 4 (done): local web app with a dashboard, account filter, before/after Belka toggle and forms to log everything.
 
 ## Run the app
+Needs Node.js 20 or newer (`node -v`). Ubuntu's apt ships Node 12, which is too old; install a current one with nvm:
+```
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+# open a new terminal, then in this folder:
+nvm install 22
+```
+Then:
 ```
 npm install
 npm start          # open http://localhost:5173

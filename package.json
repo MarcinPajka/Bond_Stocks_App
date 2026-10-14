@@ -7,7 +7,9 @@
     "test": "vitest run",
     "typecheck": "tsc",
     "start": "tsx src/server.ts",
-    "report": "tsx src/cli.ts"
+    "report": "tsx src/cli.ts",
+    "prestart": "node -e \"if(+process.versions.node.split('.')[0]<20){console.error('This app needs Node.js 20 or newer, you have '+process.version+'. See README.');process.exit(1)}\"",
+    "prereport": "node -e \"if(+process.versions.node.split('.')[0]<20){console.error('This app needs Node.js 20 or newer, you have '+process.version+'. See README.');process.exit(1)}\""
   },
   "keywords": [],
   "author": "",
@@ -18,5 +20,8 @@
     "typescript": "^5.9.3",
     "vitest": "^2.1.9"
   },
-  "type": "module"
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  }
 }
