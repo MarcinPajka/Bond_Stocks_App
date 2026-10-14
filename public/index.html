@@ -1,106 +1,246 @@
 <!doctype html>
-<html lang="pl">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Portfolio</title>
-  <link rel="icon" href="data:,">
+  <title>Portfel</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232a78d6'/%3E%3Cpath d='M8 21l5-6 4 4 7-9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header>
-    <div>
-      <h1>Portfolio</h1>
-      <p class="muted" id="asof"></p>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--accent)"/><path d="M8 21l5-6 4 4 7-9" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Portfel</span>
     </div>
-    <div class="controls">
-      <label class="switch"><input type="checkbox" id="net"> After Belka tax</label>
-      <button id="refresh">Refresh prices</button>
+    <nav class="nav" id="nav">
+      <a href="#overview" data-page="overview"><svg viewBox="0 0 24 24"><path d="M3 13h8V3H3zm0 8h8v-6H3zm10 0h8V11h-8zm0-18v6h8V3z"/></svg><span>Overview</span></a>
+      <a href="#holdings" data-page="holdings"><svg viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg><span>Holdings</span></a>
+      <a href="#income" data-page="income"><svg viewBox="0 0 24 24"><path d="M5 20h3V10H5zm5.5 0h3V4h-3zM16 20h3v-7h-3z"/></svg><span>Income &amp; tax</span></a>
+      <a href="#bonds" data-page="bonds"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8v4h2V3h-8v2h4l-6 6-4-4-8 8z"/></svg><span>Bond outlook</span></a>
+      <a href="#entries" data-page="entries"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zm-1 7V3.5L18.5 9zM8 13h8v2H8zm0 4h8v2H8z"/></svg><span>Entries</span></a>
+    </nav>
+    <div class="sidebar-foot">
+      <label class="toggle"><input type="checkbox" id="netToggle"><span class="track"><span class="thumb"></span></span>After Belka tax</label>
+      <div class="theme" role="group" aria-label="Theme">
+        <button data-theme-set="light">Light</button>
+        <button data-theme-set="auto" title="Match your system">Auto</button>
+        <button data-theme-set="dark">Dark</button>
+      </div>
     </div>
-  </header>
+  </aside>
 
-  <section class="cards">
-    <div class="card"><span class="muted">Value</span><strong id="tValue">–</strong></div>
-    <div class="card"><span class="muted">Invested</span><strong id="tCost">–</strong></div>
-    <div class="card"><span class="muted" id="tGainLabel">Gain</span><strong id="tGain">–</strong></div>
-    <div class="card"><span class="muted">Return</span><strong id="tReturn">–</strong></div>
-  </section>
+  <main>
+    <header class="topbar">
+      <div>
+        <h1 id="pageTitle">Overview</h1>
+        <p class="muted" id="asof"></p>
+      </div>
+      <div class="actions">
+        <label class="toggle compact mobile-only"><input type="checkbox" id="netToggleMobile"><span class="track"><span class="thumb"></span></span>Belka</label>
+        <button class="btn ghost" id="refresh" title="Fetch fresh prices"><svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.96 7.96 0 0012 4a8 8 0 108 8h-2a6 6 0 11-1.76-4.24L13 11h7V4z"/></svg><span>Refresh</span></button>
+        <button class="btn primary" id="addBtn"><svg viewBox="0 0 24 24"><path d="M11 5h2v14h-2zM5 11h14v2H5z"/></svg><span>Add</span></button>
+      </div>
+    </header>
 
-  <nav class="chips" id="accounts"></nav>
-  <div id="warnings"></div>
+    <div id="warnings"></div>
 
-  <div class="table-wrap">
-    <table id="holdings">
-      <thead><tr>
-        <th>Instrument</th><th>Account</th><th class="num">Qty</th><th class="num">Cost</th>
-        <th class="num">Value</th><th class="num" id="gainHead">Gain</th><th class="num">Return</th>
-      </tr></thead>
-      <tbody></tbody>
-    </table>
-    <div id="empty" hidden>
-      <p>No holdings yet. Add a bond or a trade below, or</p>
-      <button id="sample">Load sample data</button>
-    </div>
+    <!-- Overview -->
+    <section class="page" id="page-overview">
+      <div class="hero card">
+        <div>
+          <span class="label">Total value</span>
+          <div class="big" id="hValue">–</div>
+          <div class="hero-sub"><span class="pill" id="hGain">–</span><span class="muted" id="hGainLabel"></span></div>
+        </div>
+        <div class="hero-stats">
+          <div><span class="label">Invested</span><strong id="hCost">–</strong></div>
+          <div><span class="label">Return</span><strong id="hReturn">–</strong></div>
+          <div><span class="label">Holdings</span><strong id="hCount">–</strong></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h2>Value over time</h2><span class="muted small">one point per day you open the app</span></div>
+          <div id="historyChart" class="chart"></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h2>Allocation</h2>
+            <div class="seg" id="allocMode"><button data-mode="assetClass" class="on">Type</button><button data-mode="account">Account</button></div>
+          </div>
+          <div id="allocChart" class="donut-wrap"></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h2>Coming up</h2><span class="muted small">next 4 months</span></div>
+          <ul class="events" id="events"></ul>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Best and worst</h2><a href="#holdings" class="link">All holdings →</a></div>
+          <ul class="movers" id="movers"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Holdings -->
+    <section class="page" id="page-holdings" hidden>
+      <div class="filters">
+        <div class="chips" id="accountChips"></div>
+        <div class="chips" id="classChips"></div>
+        <input type="search" id="search" placeholder="Search holdings…">
+      </div>
+      <div class="card flush">
+        <table class="holdings" id="holdingsTable">
+          <thead><tr>
+            <th data-sort="name">Instrument</th><th data-sort="account">Account</th>
+            <th data-sort="quantity" class="num">Qty</th><th data-sort="cost" class="num">Invested</th>
+            <th data-sort="value" class="num">Value</th><th data-sort="gain" class="num" id="gainHead">Gain</th>
+            <th data-sort="ret" class="num">Return</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="empty" id="holdingsEmpty" hidden></div>
+      </div>
+    </section>
+
+    <!-- Income & tax -->
+    <section class="page" id="page-income" hidden>
+      <div class="card">
+        <div class="card-head"><h2 id="limitsTitle">Tax-free accounts this year</h2>
+          <label class="check"><input type="checkbox" id="selfEmployed"> Self-employed (higher IKZE limit)</label></div>
+        <div id="limits" class="limits"></div>
+        <p class="muted small">Counted from the purchases recorded in each account this year.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Net income by year</h2><span class="muted small">after tax</span></div>
+        <div id="incomeChart" class="chart short" data-h="200"></div>
+      </div>
+      <div id="incomeYears" class="years"></div>
+    </section>
+
+    <!-- Bonds -->
+    <section class="page" id="page-bonds" hidden>
+      <div class="card">
+        <div class="card-head"><h2>If you hold every bond to maturity</h2></div>
+        <div class="assume">
+          <label>Inflation from now on <span><input type="range" id="infl" min="0" max="10" step="0.1"><output id="inflOut"></output></span></label>
+          <label>NBP reference rate <span><input type="range" id="nbp" min="0" max="10" step="0.05"><output id="nbpOut"></output></span></label>
+        </div>
+        <div class="proj-totals" id="projTotals"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Projected value</h2><select id="projPick"></select></div>
+        <div id="projChart" class="chart"></div>
+      </div>
+      <div class="card flush">
+        <table class="holdings" id="projTable">
+          <thead><tr><th>Bond</th><th>Account</th><th class="num">Matures</th><th class="num">Invested</th><th class="num">At maturity</th><th class="num">Gain</th><th class="num">After Belka</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Entries -->
+    <section class="page" id="page-entries" hidden>
+      <div class="filters">
+        <input type="search" id="entrySearch" placeholder="Search entries…">
+        <div class="actions">
+          <button class="btn ghost" id="exportBtn">Export backup</button>
+          <label class="btn ghost" tabindex="0">Import backup<input type="file" id="importFile" accept="application/json" hidden></label>
+        </div>
+      </div>
+      <div class="card flush"><ul class="entries" id="entries"></ul></div>
+    </section>
+  </main>
+</div>
+
+<nav class="bottom-nav" id="bottomNav"></nav>
+
+<!-- Add / edit dialog -->
+<dialog id="dialog">
+  <form method="dialog" class="dialog-head">
+    <h2 id="dialogTitle">Add</h2>
+    <button class="icon" value="cancel" aria-label="Close">✕</button>
+  </form>
+  <div class="seg wide" id="formTabs">
+    <button data-form="bond" class="on">Bond</button>
+    <button data-form="trade">Buy / sell</button>
+    <button data-form="dividend">Dividend</button>
   </div>
 
-  <section class="panel">
-    <nav class="tabs">
-      <button data-form="bond" class="active">Add bond</button>
-      <button data-form="trade">Add buy / sell</button>
-      <button data-form="dividend">Add dividend</button>
-      <button data-form="list">All entries</button>
-    </nav>
+  <form id="form-bond" class="form">
+    <label>Series<input name="series" placeholder="e.g. EDO1035" required pattern="[A-Za-z]{3}\d{4}" autocomplete="off"><small>Code from your PKO statement. Rate, margin and fee are fetched automatically.</small></label>
+    <div class="row">
+      <label>Purchase date<input name="purchaseDate" type="date" required></label>
+      <label>Number of bonds<input name="quantity" type="number" min="1" step="1" required></label>
+    </div>
+    <div class="row">
+      <label>Price per bond (zł)<input name="pricePerBond" type="number" step="0.01" value="100"><small>99.90 if bought by exchange</small></label>
+      <label>Account<select name="account"></select></label>
+    </div>
+    <details><summary>Override series terms</summary>
+      <div class="row three">
+        <label>First-year rate %<input name="firstYearRate" type="number" step="0.01"></label>
+        <label>Margin %<input name="margin" type="number" step="0.01"></label>
+        <label>Early fee zł<input name="earlyFee" type="number" step="0.01"></label>
+      </div>
+    </details>
+    <button class="btn primary block">Save bond</button>
+  </form>
 
-    <form id="form-bond" class="grid">
-      <label>Series <input name="series" placeholder="EDO1035" required pattern="[A-Za-z]{3}\d{4}"></label>
-      <label>Purchase date <input name="purchaseDate" type="date" required></label>
-      <label>Quantity <input name="quantity" type="number" min="1" step="1" required></label>
-      <label>Price per bond <input name="pricePerBond" type="number" step="0.01" value="100"></label>
-      <label>Account <select name="account"></select></label>
-      <details class="full"><summary>Optional: override the series terms (normally fetched from obligacjeskarbowe.pl)</summary>
-        <div class="grid">
-          <label>First-year rate % <input name="firstYearRate" type="number" step="0.01"></label>
-          <label>Margin % <input name="margin" type="number" step="0.01"></label>
-          <label>Early-redemption fee zł <input name="earlyFee" type="number" step="0.01"></label>
-        </div>
-      </details>
-      <button class="full">Add bond</button>
-    </form>
+  <form id="form-trade" class="form" hidden>
+    <div class="seg wide" id="tradeType"><button type="button" data-type="buy" class="on">Buy</button><button type="button" data-type="sell">Sell</button></div>
+    <input type="hidden" name="type" value="buy">
+    <div class="row">
+      <label>Symbol<input name="symbol" placeholder="CDR, VWCE, PKODFE" required list="symbols" autocomplete="off"></label>
+      <label>Date<input name="date" type="date" required></label>
+    </div>
+    <div class="row three">
+      <label>Quantity<input name="quantity" type="number" step="any" min="0" required></label>
+      <label>Price per unit<input name="price" type="number" step="any" min="0" required></label>
+      <label>Commission<input name="commission" type="number" step="0.01" value="0"></label>
+    </div>
+    <label>Account<select name="account"></select></label>
+    <details id="newInstrument"><summary>New instrument? Tell the app where to find its price</summary>
+      <div class="row">
+        <label>Name<input name="name" placeholder="CD Projekt"></label>
+        <label>Currency<input name="currency" value="PLN" maxlength="3"></label>
+      </div>
+      <div class="row three">
+        <label>stooq symbol<input name="stooq" placeholder="cdr, vwce.de"></label>
+        <label>Yahoo symbol<input name="yahoo" placeholder="CDR.WA"></label>
+        <label>analizy.pl id<input name="analizy" placeholder="EBAN2"></label>
+      </div>
+      <small class="muted">GPW shares need nothing extra. Funds such as PKO DFE need their analizy.pl id (EBAN2).</small>
+    </details>
+    <button class="btn primary block">Save trade</button>
+  </form>
 
-    <form id="form-trade" class="grid" hidden>
-      <label>Symbol <input name="symbol" placeholder="CDR" required list="symbols"></label>
-      <label>Type <select name="type"><option value="buy">Buy</option><option value="sell">Sell</option></select></label>
-      <label>Date <input name="date" type="date" required></label>
-      <label>Quantity <input name="quantity" type="number" step="any" min="0" required></label>
-      <label>Price per unit <input name="price" type="number" step="any" min="0" required></label>
-      <label>Commission <input name="commission" type="number" step="0.01" value="0"></label>
-      <label>Account <select name="account"></select></label>
-      <details class="full"><summary>New instrument details</summary>
-        <div class="grid">
-          <label>Name <input name="name" placeholder="CD Projekt"></label>
-          <label>Currency <input name="currency" value="PLN" maxlength="3"></label>
-          <label>stooq symbol <input name="stooq" placeholder="cdr / vwce.de"></label>
-          <label>Yahoo symbol <input name="yahoo" placeholder="CDR.WA / VWCE.DE"></label>
-          <label>analizy.pl fund id <input name="analizy" placeholder="EBAN2 for PKO DFE"></label>
-        </div>
-      </details>
-      <button class="full">Add trade</button>
-    </form>
+  <form id="form-dividend" class="form" hidden>
+    <div class="row">
+      <label>Symbol<input name="symbol" required list="symbols" autocomplete="off"></label>
+      <label>Pay date<input name="date" type="date" required></label>
+    </div>
+    <div class="row">
+      <label>Gross amount (total)<input name="gross" type="number" step="0.01" min="0" required></label>
+      <label>Tax withheld (total)<input name="withheldTax" type="number" step="0.01" min="0"><small>Empty for a Polish dividend: 19% is assumed</small></label>
+    </div>
+    <label>Account<select name="account"></select></label>
+    <button class="btn primary block">Save dividend</button>
+  </form>
+  <p class="form-error" id="formError"></p>
+  <datalist id="symbols"></datalist>
+</dialog>
 
-    <form id="form-dividend" class="grid" hidden>
-      <label>Symbol <input name="symbol" required list="symbols"></label>
-      <label>Pay date <input name="date" type="date" required></label>
-      <label>Gross amount (total) <input name="gross" type="number" step="0.01" min="0" required></label>
-      <label>Tax withheld (total) <input name="withheldTax" type="number" step="0.01" min="0"></label>
-      <label>Account <select name="account"></select></label>
-      <button class="full">Add dividend</button>
-    </form>
+<div class="toast" id="toast" role="status"></div>
+<div class="tooltip" id="tooltip" hidden></div>
 
-    <div id="form-list" hidden></div>
-    <datalist id="symbols"></datalist>
-    <p id="formMsg" class="muted"></p>
-  </section>
-
-  <script src="app.js"></script>
+<script src="charts.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

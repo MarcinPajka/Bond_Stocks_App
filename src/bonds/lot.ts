@@ -42,7 +42,7 @@ export function termsFor(lot: BondLot, data: BondData): SeriesTerms {
   const terms = lot.terms ?? data.series[lot.series.toUpperCase()];
   if (!terms) {
     throw new Error(
-      `Unknown series ${lot.series}: add "terms" (firstYearRate, margin, earlyFee) to the holding or to data/bond-series.json`,
+      `No terms known for ${lot.series.toUpperCase()}. Check the series code, or enter its first-year rate, margin and fee under "Override series terms".`,
     );
   }
   return terms;

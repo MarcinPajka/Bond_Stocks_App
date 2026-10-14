@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { today, type IsoDate } from "./bonds/dates.js";
-import { loadBondData, valueLot, type BondLot, type BondLotValuation } from "./bonds/lot.js";
+import { loadBondData, valueLot, type BondData, type BondLot, type BondLotValuation } from "./bonds/lot.js";
 import { loadCache, mergeData, refreshBondData } from "./bonds/refresh.js";
 import { fetchFxRate, fetchQuote } from "./prices/providers.js";
 import { buildPositions, type Dividend, type Instrument, type Position, type Quote, type Trade } from "./stocks/positions.js";
@@ -13,12 +13,15 @@ export interface PortfolioFile {
   dividends?: Dividend[];
   /** Manual prices, used offline or when no live price is found. */
   prices?: Record<string, { price: number; date: IsoDate; fxRate?: number }>;
+  settings?: { ikzeSelfEmployed?: boolean };
 }
 
 export interface Report {
   asOf: IsoDate;
   bonds: BondLotValuation[];
   positions: Position[];
+  trades: Trade[]; // with exchange rates filled in
+  bondData: BondData; // bundled + fetched terms, CPI and NBP rates used for the valuation
   warnings: string[];
 }
 
@@ -62,12 +65,12 @@ export async function buildReport(p: PortfolioFile, opts: ReportOptions = {}): P
     } catch (e) {
       if (opts.strict) {
         const related = warnings.filter((w) => w.startsWith(lot.series.toUpperCase()));
-        throw new Error(related[0] ?? `${lot.series}: ${(e as Error).message}`);
+        throw new Error(related[0] ?? (e as Error).message);
       }
       warnings.push(`${lot.series} bought ${lot.purchaseDate}: ${(e as Error).message}`);
     }
   }
-  if (opts.skipPrices) return { asOf, bonds, positions: [], warnings };
+  if (opts.skipPrices) return { asOf, bonds, positions: [], trades: [], bondData, warnings };
 
   const instruments = p.instruments ?? [];
   const currencyOf = (s: string) => instruments.find((i) => i.symbol === s)?.currency ?? "PLN";
@@ -103,5 +106,5 @@ export async function buildReport(p: PortfolioFile, opts: ReportOptions = {}): P
     }
   }
 
-  return { asOf, bonds, positions: buildPositions(instruments, trades, dividends, quotes), warnings };
+  return { asOf, bonds, positions: buildPositions(instruments, trades, dividends, quotes), trades, bondData, warnings };
 }

@@ -7,6 +7,14 @@ Private tracker for Polish treasury bonds, stocks/ETFs and PKO DFE, with gains s
 - Step 2 (done): shares and ETFs with FIFO sells, commissions, dividends, foreign currency via NBP rates, live prices from stooq.pl with Yahoo Finance as fallback.
 - Step 3 (done): per-instrument income in one report, PKO DFE priced from analizy.pl.
 - Step 4 (done): local web app with a dashboard, account filter, before/after Belka toggle and forms to log everything.
+- Step 5 (done): redesigned app with five pages, light/dark theme and a phone layout:
+  - Overview: total value and gain, value history (a snapshot is saved each day the app is opened, in `portfolio-history.json`), allocation by asset class and account, upcoming bond payouts, rate resets and maturities, IKE/IKZE contribution limits for the year.
+  - Holdings: sortable, filterable and searchable list with a per-instrument breakdown.
+  - Income & tax: bond interest, dividends and realised gains per year, with Belka and the PIT-38 amount for regular accounts.
+  - Bond outlook: each bond held to maturity under an inflation and NBP-rate assumption you set with sliders.
+  - Entries: edit or delete any logged item, export and import the portfolio as JSON.
+
+IKE/IKZE contributions are approximated from purchases made in those accounts, so reinvested sale proceeds count twice. Tick "self-employed" on the Overview page for the higher IKZE limit.
 
 ## Run the app
 Needs Node.js 20 or newer (`node -v`). Ubuntu's apt ships Node 12, which is too old; install a current one with nvm:

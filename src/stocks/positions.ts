@@ -56,6 +56,9 @@ export interface Position {
   realizedPln: number;
   dividendsGrossPln: number;
   dividendsTaxPln: number;
+  /** Each sell with its FIFO gain, and each dividend, for yearly tax figures. PLN. */
+  sales: { date: IsoDate; quantity: number; gainPln: number }[];
+  dividendList: { date: IsoDate; grossPln: number; taxPln: number }[];
   gainPln?: number; // unrealized + realized + gross dividends
   netGainPln?: number; // after Belka on gains and dividend tax, if all sold today
 }
@@ -91,6 +94,7 @@ export function buildPositions(
 
     const lots: { qty: number; costPerShare: number }[] = [];
     let realized = 0;
+    const sales: Position["sales"] = [];
     const own = trades
       .filter((t) => t.symbol === symbol && t.account === account)
       .sort((a, b) => a.date.localeCompare(b.date) || (a.type === "buy" ? -1 : 1));
@@ -112,18 +116,23 @@ export function buildPositions(
         left -= take;
         if (lot.qty <= 1e-9) lots.shift();
       }
-      realized += t.quantity * t.price * rate - commission - matchedCost;
+      const gain = t.quantity * t.price * rate - commission - matchedCost;
+      realized += gain;
+      sales.push({ date: t.date, quantity: t.quantity, gainPln: round2(gain) });
     }
 
     const quantity = lots.reduce((a, l) => a + l.qty, 0);
     const costPln = round2(lots.reduce((a, l) => a + l.qty * l.costPerShare, 0));
     let dividendsGrossPln = 0;
     let dividendsTaxPln = 0;
+    const dividendList: Position["dividendList"] = [];
     for (const d of dividends.filter((d) => d.symbol === symbol && d.account === account)) {
       const rate = fx(inst.currency, d.fxRate, `${symbol} dividend on ${d.date}`);
       const gross = d.gross * rate;
+      const tax = dividendTax(gross, d.withheldTax === undefined ? undefined : d.withheldTax * rate, account);
       dividendsGrossPln += gross;
-      dividendsTaxPln += dividendTax(gross, d.withheldTax === undefined ? undefined : d.withheldTax * rate, account);
+      dividendsTaxPln += tax;
+      dividendList.push({ date: d.date, grossPln: round2(gross), taxPln: tax });
     }
 
     const position: Position = {
@@ -135,6 +144,8 @@ export function buildPositions(
       realizedPln: round2(realized),
       dividendsGrossPln: round2(dividendsGrossPln),
       dividendsTaxPln: round2(dividendsTaxPln),
+      sales,
+      dividendList,
     };
 
     const quote = quotes[symbol];
