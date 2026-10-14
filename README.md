@@ -3,14 +3,17 @@
 Private tracker for Polish treasury bonds, stocks/ETFs and PKO DFE, with gains shown before and after Belka tax and IKE/IKZE/OKI accounts.
 
 ## Status
-Step 1 of 4: bond calculator. All current retail treasury bonds are supported: OTS, ROR, DOR, TOS, COI, EDO, ROS, ROD.
+- Step 1 (done): bond calculator for all retail treasury bonds: OTS, ROR, DOR, TOS, COI, EDO, ROS, ROD.
+- Step 2 (done): shares and ETFs with FIFO sells, commissions, dividends, foreign currency via NBP rates, live prices from stooq.pl with Yahoo Finance as fallback.
+- Next: per-instrument income view and PKO DFE, then the web app.
 
 ## Try it
 ```
 npm install
-cp holdings.example.json holdings.json   # edit with your own bonds
-npx tsx src/cli.ts                       # value as of today
-npx tsx src/cli.ts holdings.json 2027-04-15
+cp portfolio.example.json portfolio.json   # made-up sample; replace with your own holdings
+npx tsx src/cli.ts                         # live prices, value as of today
+npx tsx src/cli.ts --offline               # use the "prices" in the file instead
+npx tsx src/cli.ts --date 2027-04-15       # bonds valued on another date
 npm test
 ```
 
@@ -28,3 +31,11 @@ npm test
 - OTS redeemed early returns only the nominal.
 - No early-redemption fee on IKE/IKZE payouts.
 - Belka: 19% of the gain, rounded to whole złoty; not applied on IKE/IKZE/OKI.
+
+## Shares, ETFs and dividends
+- `instruments`: symbol, currency, and optionally `stooq` / `yahoo` symbols (defaults: `cdr` and `CDR.WA` for GPW).
+- `trades`: buys and sells per account; sells match buys first-in-first-out. Commissions are part of the cost.
+- Foreign trades and dividends are converted at the NBP rate from the business day before (fetched automatically, or set `fxRate`).
+- `dividends`: gross amount and tax withheld at source. On a regular account at least 19% is due in total.
+- Gain = unrealised + realised + gross dividends; "Net Belka" is what's left after tax if everything were sold today. Belka is shown per instrument; in a real PIT-38 losses offset gains within the year.
+- `prices`: manual prices, used with `--offline` or when no live price is found.

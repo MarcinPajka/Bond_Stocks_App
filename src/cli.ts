@@ -1,24 +1,44 @@
-// Usage: npx tsx src/cli.ts [holdings.json] [YYYY-MM-DD]
-import { readFileSync } from "node:fs";
-import { loadBondData, valueLot, type BondLot } from "./bonds/lot.js";
-import { today } from "./bonds/dates.js";
+// Usage: npx tsx src/cli.ts [portfolio.json] [--offline] [--date YYYY-MM-DD]
+import { buildReport, loadPortfolio } from "./portfolio.js";
 
-const file = process.argv[2] ?? "holdings.json";
-const asOf = process.argv[3] ?? today();
-const holdings: { bonds: BondLot[] } = JSON.parse(readFileSync(file, "utf8"));
-const data = loadBondData();
-const zl = (x: number) => x.toFixed(2).padStart(10);
+const args = process.argv.slice(2);
+const file = args.find((a) => a.endsWith(".json")) ?? "portfolio.json";
+const dateIdx = args.indexOf("--date");
+const report = await buildReport(loadPortfolio(file), {
+  offline: args.includes("--offline"),
+  asOf: dateIdx >= 0 ? args[dateIdx + 1] : undefined,
+});
 
-console.log(`Valuation as of ${asOf}\n`);
-for (const lot of holdings.bonds) {
-  const r = valueLot(lot, data, asOf);
+const zl = (x: number | undefined) => (x === undefined ? "—" : x.toFixed(2)).padStart(10);
+const row = (cols: string[]) => console.log(cols.join("  "));
+
+console.log(`Portfolio as of ${report.asOf}\n`);
+console.log("BONDS");
+row(["Series ", "Account", "  Qty", "      Cost", "     Value", "  Int.paid", "      Gain", " Net Belka", " If sold now (net gain)"]);
+let total = { cost: 0, value: 0, gain: 0, net: 0 };
+for (const r of report.bonds) {
+  row([
+    r.lot.series.padEnd(7), r.lot.account.padEnd(7), String(r.lot.quantity).padStart(5),
+    zl(r.cost), zl(r.value), zl(r.interestPaid), zl(r.gain), zl(r.netGain), zl(r.redemptionNetGain),
+  ]);
   const p = r.valuation.currentPeriod;
-  const why = p.basis ?? "fixed";
-  console.log(`${lot.series} x${lot.quantity} (${lot.account}), bought ${lot.purchaseDate}`);
-  console.log(`  period ${p.index}: ${p.start} → ${p.end}, ${p.rate.toFixed(2)}% (${why})`);
-  console.log(`  cost           ${zl(r.cost)} zł`);
-  console.log(`  value          ${zl(r.value)} zł   (${r.valuation.valuePerBond.toFixed(2)} per bond)`);
-  if (r.interestPaid) console.log(`  interest paid  ${zl(r.interestPaid)} zł`);
-  console.log(`  gain           ${zl(r.gain)} zł   after Belka ${zl(r.netGain)} zł`);
-  console.log(`  if redeemed now${zl(r.redemptionValue)} zł   gain after Belka ${zl(r.redemptionNetGain)} zł\n`);
+  console.log(`         period ${p.index}: ${p.rate.toFixed(2)}% ${p.basis ? `(${p.basis})` : "(fixed)"}`);
+  total = { cost: total.cost + r.cost, value: total.value + r.value, gain: total.gain + r.gain, net: total.net + r.netGain };
 }
+
+console.log("\nSHARES & ETFs (PLN)");
+row(["Symbol ", "Account", "  Qty", "      Cost", "     Value", "  Realised", " Dividends", "      Gain", " Net Belka", "  Price"]);
+for (const p of report.positions) {
+  row([
+    p.symbol.padEnd(7), p.account.padEnd(7), String(p.quantity).padStart(5),
+    zl(p.costPln), zl(p.valuePln), zl(p.realizedPln), zl(p.dividendsGrossPln), zl(p.gainPln), zl(p.netGainPln),
+    p.price === undefined ? "  no price" : `  ${p.price} (${p.priceDate})`,
+  ]);
+  total = {
+    cost: total.cost + p.costPln, value: total.value + (p.valuePln ?? 0),
+    gain: total.gain + (p.gainPln ?? 0), net: total.net + (p.netGainPln ?? 0),
+  };
+}
+
+console.log(`\nTOTAL  cost ${total.cost.toFixed(2)}  value ${total.value.toFixed(2)}  gain ${total.gain.toFixed(2)}  after Belka ${total.net.toFixed(2)} zł`);
+for (const w of report.warnings) console.log(`! ${w}`);
