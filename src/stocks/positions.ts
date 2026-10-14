@@ -14,6 +14,7 @@ export interface Instrument {
   currency: string; // "PLN", "EUR", ...
   stooq?: string; // stooq symbol, default lower-case symbol (GPW)
   yahoo?: string; // Yahoo symbol, default SYMBOL.WA (GPW)
+  analizy?: string; // analizy.pl fund id for funds priced by unit value, e.g. "EBAN2" (PKO DFE)
 }
 
 export interface Trade {

@@ -5,6 +5,7 @@ import type { Instrument } from "../stocks/positions.js";
  * Live data, fetched on the machine running the app.
  *  - stooq.pl current quote CSV (still free; stooq's historical CSV needs an API key since 2026)
  *  - Yahoo Finance chart API as a fallback
+ *  - analizy.pl fund pages for unit values of funds such as PKO DFE
  *  - NBP table A for exchange rates
  */
 
@@ -41,7 +42,20 @@ export function parseYahooChart(json: string): RawQuote | undefined {
   return { price, date, source: "yahoo" };
 }
 
+/** Unit value from an analizy.pl fund page ("28,28 PLN … Aktualna wartość J.U. … 12.10.2026"). */
+export function parseAnalizyFundPage(html: string): RawQuote | undefined {
+  const text = html.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ");
+  const m = text.match(/(\d[\d ]*,\d+) PLN Aktualna wartość J\.U\. (\d{2})\.(\d{2})\.(\d{4})/);
+  if (!m) return undefined;
+  return { price: Number(m[1].replace(/ /g, "").replace(",", ".")), date: `${m[4]}-${m[3]}-${m[2]}`, source: "analizy.pl" };
+}
+
 export async function fetchQuote(inst: Instrument, get: Fetcher = httpFetch): Promise<RawQuote> {
+  if (inst.analizy) {
+    const q = parseAnalizyFundPage(await get(`https://www.analizy.pl/fundusz/${encodeURIComponent(inst.analizy)}`));
+    if (!q) throw new Error(`No unit value found on analizy.pl for ${inst.analizy}`);
+    return q;
+  }
   const stooq = inst.stooq ?? inst.symbol.toLowerCase();
   const yahoo = inst.yahoo ?? `${inst.symbol.toUpperCase()}.WA`;
   const errors: string[] = [];

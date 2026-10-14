@@ -26,11 +26,11 @@ for (const r of report.bonds) {
   total = { cost: total.cost + r.cost, value: total.value + r.value, gain: total.gain + r.gain, net: total.net + r.netGain };
 }
 
-console.log("\nSHARES & ETFs (PLN)");
+console.log("\nSHARES, ETFs & FUNDS (PLN)");
 row(["Symbol ", "Account", "  Qty", "      Cost", "     Value", "  Realised", " Dividends", "      Gain", " Net Belka", "  Price"]);
 for (const p of report.positions) {
   row([
-    p.symbol.padEnd(7), p.account.padEnd(7), String(p.quantity).padStart(5),
+    p.symbol.padEnd(7), p.account.padEnd(7), String(+p.quantity.toFixed(4)).padStart(5),
     zl(p.costPln), zl(p.valuePln), zl(p.realizedPln), zl(p.dividendsGrossPln), zl(p.gainPln), zl(p.netGainPln),
     p.price === undefined ? "  no price" : `  ${p.price} (${p.priceDate})`,
   ]);

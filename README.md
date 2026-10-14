@@ -5,7 +5,8 @@ Private tracker for Polish treasury bonds, stocks/ETFs and PKO DFE, with gains s
 ## Status
 - Step 1 (done): bond calculator for all retail treasury bonds: OTS, ROR, DOR, TOS, COI, EDO, ROS, ROD.
 - Step 2 (done): shares and ETFs with FIFO sells, commissions, dividends, foreign currency via NBP rates, live prices from stooq.pl with Yahoo Finance as fallback.
-- Next: per-instrument income view and PKO DFE, then the web app.
+- Step 3 (done): per-instrument income in one report, PKO DFE priced from analizy.pl.
+- Next: the web app.
 
 ## Try it
 ```
@@ -39,3 +40,6 @@ npm test
 - `dividends`: gross amount and tax withheld at source. On a regular account at least 19% is due in total.
 - Gain = unrealised + realised + gross dividends; "Net Belka" is what's left after tax if everything were sold today. Belka is shown per instrument; in a real PIT-38 losses offset gains within the year.
 - `prices`: manual prices, used with `--offline` or when no live price is found.
+
+## PKO DFE and other funds
+Add the fund as an instrument with its analizy.pl id (`"analizy": "EBAN2"` is PKO DFE) and record each contribution as a buy of units at the unit price, as shown on the PKO statement. IKZE holdings show no Belka; the 10% IKZE withdrawal tax is not modelled.

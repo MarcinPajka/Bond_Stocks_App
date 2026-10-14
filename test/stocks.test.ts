@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildPositions, type Instrument, type Trade } from "../src/stocks/positions.js";
-import { fetchFxRate, fetchQuote, parseNbpRates, parseStooqQuote, parseYahooChart } from "../src/prices/providers.js";
+import { fetchFxRate, fetchQuote, parseAnalizyFundPage, parseNbpRates, parseStooqQuote, parseYahooChart } from "../src/prices/providers.js";
 
 const instruments: Instrument[] = [
   { symbol: "CDR", currency: "PLN" },
@@ -91,5 +91,14 @@ describe("price sources", () => {
     let asked = "";
     expect(await fetchFxRate("EUR", "2026-10-13", async (u) => ((asked = u), json))).toBe(4.26);
     expect(asked).toContain("/eur/2026-09-29/2026-10-12/");
+  });
+
+  it("reads the PKO DFE unit value from analizy.pl", async () => {
+    const html = `<div class="x"><span>28,28</span> PLN</div>\n<p>Aktualna wartość J.U.</p>\n<span>12.10.2026</span><span>0,09 PLN /</span>`;
+    expect(parseAnalizyFundPage(html)).toEqual({ price: 28.28, date: "2026-10-12", source: "analizy.pl" });
+    let asked = "";
+    const q = await fetchQuote({ symbol: "PKODFE", currency: "PLN", analizy: "EBAN2" }, async (u) => ((asked = u), html));
+    expect(q.price).toBe(28.28);
+    expect(asked).toBe("https://www.analizy.pl/fundusz/EBAN2");
   });
 });
