@@ -75,6 +75,24 @@ describe("GUS and NBP", () => {
     expect(cpi["2025-02"]).toBe(4.9);
   });
 
+  it("reads the layout stat.gov.pl uses: one table, headings inside data rows", () => {
+    const real = `<table><tr><td>Wyszczególnienie</td><td>Rok</td><td colspan="12">MIESIĄCE</td></tr>
+      <tr><td>Grudzień&nbsp;&nbsp;&nbsp;&nbsp; poprzedniego<br>
+      roku = 100</td><td>2026</td><td>100,7</td><td>101,0</td></tr>
+      <tr><td></td><td>Rok</td><td>01</td><td>02</td></tr>
+      <tr><td>Analogiczny&nbsp;&nbsp; miesi&#261;c<br/>   poprzedniego
+      roku&nbsp;=&nbsp;100</td><td>2026</td><td>102,1</td><td>102,1</td><td>103,0</td><td>103,2</td><td>103,1</td><td>102,5</td><td>103,0</td><td>103,4</td><td>104,1</td><td></td><td></td><td></td></tr>
+      <tr><td></td><td>2025</td><td>104,9</td><td>104,9</td></tr>
+      <tr><td>Analogiczny okres narastający poprzedniego roku = 100</td><td>2026</td><td>102,1</td></tr>
+      <tr><td></td><td>2025</td><td>104,9</td></tr></table>`;
+    const cpi = parseGusCpiPage(real);
+    expect(cpi["2026-01"]).toBe(2.1);
+    expect(cpi["2026-09"]).toBe(4.1);
+    expect(cpi["2026-10"]).toBeUndefined();
+    expect(cpi["2025-02"]).toBe(4.9);
+    expect(Object.keys(cpi)).toHaveLength(11);
+  });
+
   it("reads the NBP reference rate", () => {
     const xml = `<tabela id="stoproc"><pozycja\n id="ref"\n nazwa="Stopa referencyjna"\n oprocentowanie="3,75"\n trend = "spadek"\n obowiazuje_od="2026-03-05" />
       <pozycja id="lom" oprocentowanie="4,25" obowiazuje_od="2026-03-05" /></tabela>`;

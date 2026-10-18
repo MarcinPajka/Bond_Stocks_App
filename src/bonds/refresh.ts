@@ -93,22 +93,35 @@ export async function fetchSeriesTerms(series: string, get: Fetcher = httpFetch)
   return parseSeriesPage(await get(`${SERIES_URL}/${slug}/${code.toLowerCase()}/`), code);
 }
 
-/** y/y CPI by month from the GUS table "Analogiczny miesiąc poprzedniego roku = 100". */
+/**
+ * y/y CPI by month from the GUS block "Analogiczny miesiąc poprzedniego roku = 100".
+ * On stat.gov.pl all blocks share one table and a block's heading sits in a cell of its
+ * first data row (or between rows), with irregular whitespace, so rows are read in order and each
+ * "... = 100" heading switches the current block.
+ */
 export function parseGusCpiPage(html: string): Record<string, number> {
-  const start = html.search(/Analogiczny miesi(?:ą|&#261;|&#x105;)c poprzedniego roku\s*=\s*100/i);
-  if (start < 0) throw new Error("GUS page: y/y CPI table not found");
-  const rest = html.slice(start);
-  const next = rest.slice(50).search(/=\s*100/);
-  const section = next < 0 ? rest : rest.slice(0, next + 50);
   const out: Record<string, number> = {};
-  for (const row of section.match(/<tr[\s\S]*?<\/tr>/gi) ?? []) {
+  let inYoy = false;
+  let found = false;
+  let last = 0;
+  for (const m of html.matchAll(/<tr[\s\S]*?<\/tr>/gi)) {
+    const row = m[0];
+    const between = pageText(html.slice(last, m.index)); // headings placed outside the table rows
+    last = m.index + row.length;
     const cells = (row.match(/<t[dh][^>]*>[\s\S]*?<\/t[dh]>/gi) ?? []).map((c) => pageText(c).trim());
+    const heading = cells.find((c) => /=\s*100\b/.test(c)) ?? (/=\s*100\b/.test(between) ? between : undefined);
+    if (heading) {
+      inYoy = /analogiczny\s+miesi\S*\s+poprzedniego\s+roku/i.test(heading);
+      found ||= inYoy;
+    }
+    if (!inYoy) continue;
     const yearIdx = cells.findIndex((c) => /^(19|20)\d{2}$/.test(c));
     if (yearIdx < 0) continue;
     cells.slice(yearIdx + 1, yearIdx + 13).forEach((c, i) => {
-      if (/^\d+,\d+$/.test(c)) out[`${cells[yearIdx]}-${String(i + 1).padStart(2, "0")}`] = Math.round((num(c) - 100) * 10) / 10;
+      if (/^\d+(,\d+)?$/.test(c)) out[`${cells[yearIdx]}-${String(i + 1).padStart(2, "0")}`] = Math.round((num(c) - 100) * 10) / 10;
     });
   }
+  if (!found) throw new Error("GUS page: y/y CPI table not found");
   if (Object.keys(out).length === 0) throw new Error("GUS page: no CPI values found");
   return out;
 }
