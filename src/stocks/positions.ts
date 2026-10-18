@@ -77,7 +77,7 @@ const round2 = (x: number) => Math.round((x + Number.EPSILON) * 100) / 100;
 
 function fx(currency: string, rate: number | undefined, what: string): number {
   if (currency === "PLN") return 1;
-  if (!rate) throw new Error(`${what}: fxRate (PLN per ${currency}) is required for foreign instruments`);
+  if (!rate) throw new Error(`${what}: enter the exchange rate (PLN per 1 ${currency})`);
   return rate;
 }
 

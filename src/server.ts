@@ -3,12 +3,13 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildReport, cachePathFor, withKnownSources, type PortfolioFile, type Report } from "./portfolio.js";
+import { buildReport, cachePathFor, withFxRates, withKnownSources, type PortfolioFile, type Report } from "./portfolio.js";
 import { checkCompatible, defaultDataDir, migrateFromAppFolder, readPortfolioFile, writePortfolioFile } from "./storage.js";
 import { contributions, incomeByYear, projectBonds, upcomingEvents } from "./insights.js";
 import { toRows } from "./view.js";
 import { loadPriceHistory, recordQuotes, refreshPriceHistory, valueHistory } from "./history.js";
 import { today } from "./bonds/dates.js";
+import { fetchFxQuote } from "./prices/providers.js";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const DATA_DIR = defaultDataDir();
@@ -109,6 +110,15 @@ createServer(async (req, res) => {
     if (url.pathname === "/api/history" && req.method === "GET") {
       return send(res, 200, await history(url.searchParams.has("refresh")));
     }
+    if (url.pathname === "/api/fx" && req.method === "GET") {
+      // NBP rate from the business day before a trade, to prefill the entry form.
+      if (OFFLINE) return send(res, 400, { error: "offline" });
+      const currency = (url.searchParams.get("currency") ?? "").toUpperCase();
+      if (!/^[A-Z]{3}$/.test(currency)) return send(res, 400, { error: "Unknown currency" });
+      const date = url.searchParams.get("date") || undefined;
+      if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return send(res, 400, { error: "Bad date" });
+      return send(res, 200, await fetchFxQuote(currency, date));
+    }
     if (url.pathname === "/api/projection" && req.method === "GET") {
       const { report: r } = await report(undefined, false);
       const inflation = Number(url.searchParams.get("inflation") ?? 3);
@@ -117,7 +127,9 @@ createServer(async (req, res) => {
     }
     if (url.pathname === "/api/portfolio" && req.method === "GET") return send(res, 200, readPortfolio());
     if (url.pathname === "/api/portfolio" && req.method === "PUT") {
-      const next: PortfolioFile = JSON.parse(await readBody(req));
+      let next: PortfolioFile = JSON.parse(await readBody(req));
+      // An entry in a foreign currency is saved with the exchange rate it was taxed at.
+      if (!OFFLINE) next = await withFxRates(next);
       // Reject data the calculators can't handle; this also fetches terms for new bond series.
       await buildReport(withKnownSources(next), { offline: OFFLINE, cachePath: MARKET_CACHE, skipPrices: true, strict: true });
       await buildReport(withKnownSources(next), { offline: true, cachePath: MARKET_CACHE, skipPrices: false });

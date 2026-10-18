@@ -116,13 +116,23 @@ export async function fetchQuote(inst: Instrument, get: Fetcher = httpFetch): Pr
 
 /** NBP mid rate (table A) from the last business day strictly before `date`, or the latest one. */
 export function parseNbpRates(json: string, before?: IsoDate): number | undefined {
+  return parseNbpRate(json, before)?.rate;
+}
+
+function parseNbpRate(json: string, before?: IsoDate): { rate: number; date: IsoDate } | undefined {
   const rates: { effectiveDate: string; mid: number }[] = JSON.parse(json).rates ?? [];
   const usable = before ? rates.filter((r) => r.effectiveDate < before) : rates;
-  return usable.sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate)).at(-1)?.mid;
+  const last = usable.sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate)).at(-1);
+  return last && { rate: last.mid, date: last.effectiveDate };
 }
 
 export async function fetchFxRate(currency: string, before?: IsoDate, get: Fetcher = httpFetch): Promise<number> {
-  if (currency === "PLN") return 1;
+  return (await fetchFxQuote(currency, before, get)).rate;
+}
+
+/** The NBP rate used for tax on a trade: table A from the last business day before `before`, and its date. */
+export async function fetchFxQuote(currency: string, before?: IsoDate, get: Fetcher = httpFetch): Promise<{ rate: number; date: IsoDate }> {
+  if (currency === "PLN") return { rate: 1, date: before ?? new Date().toISOString().slice(0, 10) };
   const code = currency.toLowerCase();
   let url = `https://api.nbp.pl/api/exchangerates/rates/a/${code}/?format=json`;
   if (before) {
@@ -130,7 +140,7 @@ export async function fetchFxRate(currency: string, before?: IsoDate, get: Fetch
     const start = new Date(Date.parse(before) - 14 * 86_400_000).toISOString().slice(0, 10);
     url = `https://api.nbp.pl/api/exchangerates/rates/a/${code}/${start}/${end}/?format=json`;
   }
-  const rate = parseNbpRates(await get(url), before);
-  if (!rate) throw new Error(`No NBP ${currency} rate${before ? ` before ${before}` : ""}`);
-  return rate;
+  const found = parseNbpRate(await get(url), before);
+  if (!found) throw new Error(`No NBP ${currency} rate${before ? ` before ${before}` : ""}`);
+  return found;
 }

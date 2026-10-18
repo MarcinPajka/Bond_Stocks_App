@@ -43,6 +43,8 @@ Use "Load sample data" to try it with made-up holdings. The server listens on lo
 
 Foreign shares and ETFs can be entered in the currency you actually paid: if your broker charged you in złoty for VWCE, set the instrument's currency to PLN and enter złoty prices. The live price is read in the listing's own currency (EUR for VWCE.DE, as Yahoo reports it) and converted at today's NBP rate, so the gain is the real one in złoty.
 
+Exchange rates change, so each entry keeps its own. When you add or edit a trade or dividend in a foreign currency, the form fills in the NBP rate from the business day before its date (the rate the tax office uses for Belka) and saves it with the entry; type your broker's rate over it if you prefer that. For an entry paid in złoty for something listed abroad, the form shows that day's rate and what your price was in the listing's currency. Current values always use today's NBP rate.
+
 Each share or fund needs a price source: GPW shares need nothing; foreign ETFs need their stooq or Yahoo symbol; funds need their analizy.pl id (open the holding and press "Price source"). Instruments the app already knows from its sample list, such as PKODFE, get theirs filled in automatically.
 
 ## Command-line report
@@ -74,7 +76,7 @@ Offline mode uses whatever was last saved in the cache, so the app has to run on
 ## Shares, ETFs and dividends
 - `instruments`: symbol, currency, and optionally `stooq` / `yahoo` symbols (defaults: `cdr` and `CDR.WA` for GPW).
 - `trades`: buys and sells per account; sells match buys first-in-first-out. Commissions are part of the cost.
-- Foreign trades and dividends are converted at the NBP rate from the business day before (fetched automatically, or set `fxRate`).
+- Foreign trades and dividends carry `fxRate` (PLN per unit of the currency). The app fills in the NBP rate from the business day before when you save one without it.
 - `dividends`: gross amount and tax withheld at source. On a regular account at least 19% is due in total.
 - Gain = unrealised + realised + gross dividends; "Net Belka" is what's left after tax if everything were sold today. Belka is shown per instrument; in a real PIT-38 losses offset gains within the year.
 - `prices`: manual prices, used with `--offline` or when no live price is found.

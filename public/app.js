@@ -428,10 +428,16 @@ function entryList() {
   (p.bonds ?? []).forEach((b, i) => out.push({ list: "bonds", i, date: b.purchaseDate, icon: "🏛",
     main: `${b.series} × ${b.quantity}`, sub: `Bond bought ${dateFmt(b.purchaseDate)}${b.redeemedOn ? `, redeemed ${dateFmt(b.redeemedOn)}` : ""} · ${accountName(b.account)}` }));
   (p.trades ?? []).forEach((t, i) => out.push({ list: "trades", i, date: t.date, icon: t.type === "buy" ? "↗" : "↘",
-    main: `${t.type === "buy" ? "Bought" : "Sold"} ${t.quantity} ${t.symbol} at ${t.price}`, sub: `${dateFmt(t.date)} · ${accountName(t.account)}${t.commission ? ` · commission ${t.commission}` : ""}` }));
+    main: `${t.type === "buy" ? "Bought" : "Sold"} ${t.quantity} ${t.symbol} at ${t.price}`, sub: `${dateFmt(t.date)} · ${accountName(t.account)}${t.commission ? ` · commission ${t.commission}` : ""}${fxText(t)}` }));
   (p.dividends ?? []).forEach((d, i) => out.push({ list: "dividends", i, date: d.date, icon: "💰",
-    main: `Dividend ${d.symbol}: ${d.gross}`, sub: `${dateFmt(d.date)} · ${accountName(d.account)}${d.withheldTax != null ? ` · tax withheld ${d.withheldTax}` : ""}` }));
+    main: `Dividend ${d.symbol}: ${d.gross}`, sub: `${dateFmt(d.date)} · ${accountName(d.account)}${d.withheldTax != null ? ` · tax withheld ${d.withheldTax}` : ""}${fxText(d)}` }));
   return out.sort((a, b) => b.date.localeCompare(a.date));
+}
+
+const instrumentOf = (symbol) => (state.portfolio.instruments ?? []).find((i) => i.symbol === symbol);
+function fxText(e) {
+  const cur = instrumentOf(e.symbol)?.currency ?? "PLN";
+  return cur !== "PLN" && e.fxRate ? ` · ${cur}/PLN ${e.fxRate}` : "";
 }
 
 function renderEntries() {
@@ -457,7 +463,13 @@ const ALL_FORMS = ["bond", "trade", "dividend", "redeem", "instrument"];
 $$("select[name=account]").forEach((s) => (s.innerHTML = ACCOUNTS.map((a) => `<option value="${a}">${accountName(a)}</option>`).join("")));
 
 function showForm(name) {
-  if (name === "trade") setTimeout(updatePriceCurrency);
+  // Also hides "New instrument?" when editing a trade in one you already have.
+  if (name === "trade") setTimeout(() => $("#form-trade [name=symbol]").dispatchEvent(new Event("input")));
+  if (name === "trade" || name === "dividend") {
+    const key = name === "trade" ? "trade" : "div";
+    // Editing an entry that already has a rate keeps it; otherwise look one up.
+    setTimeout(() => updateFx(key, { refetch: !$(FX_FORMS[key].form).elements.fxRate.value }));
+  }
   $$("#formTabs button").forEach((b) => b.classList.toggle("on", b.dataset.form === name));
   ALL_FORMS.forEach((f) => ($(`#form-${f}`).hidden = f !== name));
   $("#formError").textContent = "";
@@ -472,6 +484,8 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 
 function resetDialog() {
   ALL_FORMS.forEach((f) => $(`#form-${f}`).reset());
+  $$("#dialog [name=fxRate]").forEach((i) => delete i.dataset.touched);
+  $$("#tradeFx, #divFx, #tradeFxInfo, #divFxInfo").forEach((el) => (el.hidden = true));
   setTradeType("buy");
   $$("#dialog input[type=date][required]").forEach((i) => (i.value = todayStr()));
   $("#sellHead").hidden = true;
@@ -667,7 +681,10 @@ $("#form-trade").addEventListener("submit", (e) => {
     instruments.push(clean({ symbol, name: f.name, currency: (f.currency || "PLN").toUpperCase(), stooq: f.stooq, yahoo: f.yahoo, analizy: analizyId(f.analizy) }));
   }
   const old = state.editing ? state.portfolio.trades[state.editing.index] : {};
-  const trade = clean({ ...old, symbol, account: f.account, type: f.type, date: f.date, quantity: num(f.quantity), price: num(f.price), commission: num(f.commission) });
+  const trade = clean({ ...old, symbol, account: f.account, type: f.type, date: f.date, quantity: num(f.quantity), price: num(f.price), commission: num(f.commission), fxRate: undefined });
+  const fxRate = $("#tradeFx").hidden ? undefined : num(f.fxRate);
+  if (fxRate) trade.fxRate = fxRate;
+  else delete trade.fxRate; // the server looks up the NBP rate when saving
   submitEntry("trades", trade, { instruments }, `${trade.type === "buy" ? "Bought" : "Sold"} ${trade.quantity} ${symbol}`);
 });
 
@@ -677,6 +694,9 @@ $("#form-dividend").addEventListener("submit", (e) => {
   const old = state.editing ? state.portfolio.dividends[state.editing.index] : {};
   const dividend = clean({ ...old, symbol: f.symbol.trim().toUpperCase(), account: f.account, date: f.date, gross: num(f.gross), withheldTax: num(f.withheldTax) });
   if (f.withheldTax === "") delete dividend.withheldTax;
+  const fxRate = $("#divFx").hidden ? undefined : num(f.fxRate);
+  if (fxRate) dividend.fxRate = fxRate;
+  else delete dividend.fxRate;
   submitEntry("dividends", dividend, {}, `Added dividend for ${dividend.symbol}`);
 });
 
@@ -693,6 +713,72 @@ $("#form-trade [name=symbol]").addEventListener("input", (e) => {
   updatePriceCurrency();
 });
 $("#form-trade [name=currency]").addEventListener("input", updatePriceCurrency);
+
+// ---------------------------------------------------------------- exchange rates in the forms
+
+/**
+ * Foreign-currency entries need the PLN rate. The form fills in the NBP rate from the
+ * business day before the date (what the tax office uses); you can type your broker's
+ * rate instead. Złoty entries for a foreign listing just show the rate for reference.
+ */
+const FX_FORMS = { trade: { form: "#form-trade", money: "price" }, div: { form: "#form-dividend", money: "gross" } };
+let fxSeq = 0;
+
+function entryCurrency(f) {
+  const symbol = f.elements.symbol.value.trim().toUpperCase();
+  const inst = instrumentOf(symbol);
+  return ((inst ? inst.currency : f.elements.currency?.value) || "PLN").toUpperCase();
+}
+const listingCurrency = (symbol) => state.data?.rows.find((r) => r.name === symbol && r.price)?.price.currency;
+
+async function nbpRate(currency, date) {
+  return api(`/api/fx?currency=${currency}&date=${date}`);
+}
+
+async function updateFx(key, { refetch = true } = {}) {
+  const { form, money: amountField } = FX_FORMS[key];
+  const f = $(form);
+  const box = $(`#${key}Fx`), info = $(`#${key}FxInfo`);
+  const cur = entryCurrency(f);
+  const date = f.elements.date.value;
+  const listing = listingCurrency(f.elements.symbol.value.trim().toUpperCase());
+  box.hidden = cur === "PLN";
+  info.hidden = true;
+  const seq = ++fxSeq;
+  if (cur !== "PLN") {
+    box.querySelector("[data-pair]").textContent = `(PLN per 1 ${cur})`;
+    const input = f.elements.fxRate, note = box.querySelector("[data-note]");
+    if (!refetch || input.dataset.touched || !date) return;
+    note.textContent = "Looking up the NBP rate…";
+    try {
+      const r = await nbpRate(cur, date);
+      if (seq !== fxSeq || input.dataset.touched) return;
+      input.value = r.rate;
+      note.textContent = `NBP rate of ${dateFmt(r.date)}, the business day before: what the tax office uses. Type your broker's rate instead if you like.`;
+    } catch {
+      if (seq === fxSeq) note.textContent = "Couldn't look up the NBP rate. Enter the rate to save this entry.";
+    }
+  } else if (listing && listing !== "PLN" && date) {
+    // Paid in złoty for something priced in euro/dollars: show what that was in the listing's currency.
+    try {
+      const r = await nbpRate(listing, date);
+      if (seq !== fxSeq) return;
+      const amount = Number(f.elements[amountField].value);
+      info.textContent = `${listing}/PLN on ${dateFmt(r.date)} (NBP): ${r.rate.toLocaleString("pl-PL", { maximumFractionDigits: 4 })}` +
+        (amount > 0 ? `, so ${pln(amount)} ≈ ${money(amount / r.rate, listing)}${key === "trade" ? " a unit" : ""}.` : ".") +
+        ` Today's value uses today's rate.`;
+      info.hidden = false;
+    } catch {}
+  }
+}
+
+for (const key of Object.keys(FX_FORMS)) {
+  const f = $(FX_FORMS[key].form);
+  for (const name of ["symbol", "date"]) f.elements[name].addEventListener("change", () => updateFx(key));
+  f.elements.currency?.addEventListener("input", (e) => [0, 3].includes(e.target.value.trim().length) && updateFx(key));
+  f.elements[FX_FORMS[key].money].addEventListener("change", () => updateFx(key, { refetch: false }));
+  f.elements.fxRate.addEventListener("input", (e) => (e.target.dataset.touched = "1"));
+}
 
 // ---------------------------------------------------------------- events
 

@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { today, type IsoDate } from "./bonds/dates.js";
 import { emptyBondData, valueLot, type BondData, type BondLot, type BondLotValuation } from "./bonds/lot.js";
 import { cacheData, loadCache, refreshBondData } from "./bonds/refresh.js";
-import { fetchFxRate, fetchQuote, yahooSymbol } from "./prices/providers.js";
+import { fetchFxRate, fetchQuote, yahooSymbol, type Fetcher } from "./prices/providers.js";
 import { buildPositions, type Dividend, type Instrument, type Position, type Quote, type Trade } from "./stocks/positions.js";
 
 export interface PortfolioFile {
@@ -31,6 +31,31 @@ export function loadPortfolio(path: string): PortfolioFile {
 }
 
 const hasSource = (i: Instrument) => Boolean(i.stooq || i.yahoo || i.analizy);
+
+/**
+ * Fills in the exchange rate on foreign-currency trades and dividends saved without one:
+ * the NBP table A rate from the business day before, which is what Belka is computed with.
+ */
+export async function withFxRates(p: PortfolioFile, get?: Fetcher): Promise<PortfolioFile> {
+  const currencyOf = (s: string) => p.instruments?.find((i) => i.symbol === s)?.currency ?? "PLN";
+  const fill = <T extends { symbol: string; date: IsoDate; fxRate?: number }>(rows: T[] | undefined, what: string) =>
+    rows &&
+    Promise.all(
+      rows.map(async (r) => {
+        const cur = currencyOf(r.symbol);
+        if (cur === "PLN" || r.fxRate) return r;
+        try {
+          return { ...r, fxRate: await fetchFxRate(cur, r.date, get) };
+        } catch (e) {
+          throw new Error(`${r.symbol} ${what} on ${r.date}: couldn't look up the NBP ${cur} rate (${(e as Error).message}). Enter the exchange rate.`);
+        }
+      }),
+    );
+  const filled = { ...p };
+  if (p.trades) filled.trades = await fill(p.trades, "trade");
+  if (p.dividends) filled.dividends = await fill(p.dividends, "dividend");
+  return filled;
+}
 
 /**
  * Instruments saved without saying where their price comes from get it from the app's
@@ -100,19 +125,9 @@ export async function buildReport(p: PortfolioFile, opts: ReportOptions = {}): P
   if (opts.skipPrices) return { asOf, bonds, positions: [], trades: [], bondData, warnings };
 
   const instruments = p.instruments ?? [];
-  const currencyOf = (s: string) => instruments.find((i) => i.symbol === s)?.currency ?? "PLN";
-
-  // Fill in NBP rates for foreign trades and dividends that don't carry one.
-  const withFx = async <T extends { symbol: string; date: IsoDate; fxRate?: number }>(rows: T[]): Promise<T[]> =>
-    Promise.all(
-      rows.map(async (r) => {
-        const cur = currencyOf(r.symbol);
-        if (cur === "PLN" || r.fxRate || opts.offline) return r;
-        return { ...r, fxRate: await fetchFxRate(cur, r.date) };
-      }),
-    );
-  const trades = await withFx(p.trades ?? []);
-  const dividends = await withFx(p.dividends ?? []);
+  const withFx = opts.offline ? p : await withFxRates(p);
+  const trades = withFx.trades ?? [];
+  const dividends = withFx.dividends ?? [];
 
   const quotes: Record<string, Quote | undefined> = {};
   // Only instruments you trade: one left behind after renaming a symbol shouldn't raise warnings.

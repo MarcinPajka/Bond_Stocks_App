@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildPositions, type Instrument, type Trade } from "../src/stocks/positions.js";
-import { analizyId, yahooSymbol, fetchFxRate, fetchQuote, parseAnalizyFundPage, parseNbpRates, parseStooqQuote, parseYahooChart } from "../src/prices/providers.js";
+import { analizyId, yahooSymbol, fetchFxQuote, fetchFxRate, fetchQuote, parseAnalizyFundPage, parseNbpRates, parseStooqQuote, parseYahooChart } from "../src/prices/providers.js";
+import { withFxRates } from "../src/portfolio.js";
 
 const instruments: Instrument[] = [
   { symbol: "CDR", currency: "PLN" },
@@ -46,7 +47,7 @@ describe("positions", () => {
     const oversell: Trade = { symbol: "CDR", account: "IKE", type: "sell", date: "2026-01-01", quantity: 1, price: 1 };
     expect(() => buildPositions(instruments, [oversell], [], {})).toThrow(/selling more than held/);
     const noFx: Trade = { symbol: "VWCE", account: "regular", type: "buy", date: "2026-01-01", quantity: 1, price: 1 };
-    expect(() => buildPositions(instruments, [noFx], [], {})).toThrow(/fxRate/);
+    expect(() => buildPositions(instruments, [noFx], [], {})).toThrow(/exchange rate/);
   });
 
   it("keeps the price paid for the shares still held, after FIFO sells", () => {
@@ -124,6 +125,25 @@ describe("price sources", () => {
     let asked = "";
     expect(await fetchFxRate("EUR", "2026-10-13", async (u) => ((asked = u), json))).toBe(4.26);
     expect(asked).toContain("/eur/2026-09-29/2026-10-12/");
+    // The entry form shows which day's rate it used: a Tuesday trade after a Monday holiday still gets Friday's.
+    const holiday = JSON.stringify({ rates: [{ effectiveDate: "2026-10-09", mid: 4.25 }] });
+    expect(await fetchFxQuote("USD", "2026-10-13", async () => holiday)).toEqual({ rate: 4.25, date: "2026-10-09" });
+    expect(await fetchFxQuote("PLN", "2026-10-13")).toEqual({ rate: 1, date: "2026-10-13" });
+  });
+
+  it("saves foreign entries with the NBP rate when none was entered", async () => {
+    const json = JSON.stringify({ rates: [{ effectiveDate: "2026-10-12", mid: 3.66 }] });
+    const p = await withFxRates({
+      instruments: [{ symbol: "AAPL", currency: "USD" }, { symbol: "VWCE", currency: "PLN" }],
+      trades: [
+        { symbol: "AAPL", account: "regular", type: "buy", date: "2026-10-13", quantity: 1, price: 230 },
+        { symbol: "AAPL", account: "regular", type: "buy", date: "2026-10-14", quantity: 1, price: 231, fxRate: 3.7 },
+        { symbol: "VWCE", account: "regular", type: "buy", date: "2026-10-13", quantity: 1, price: 700 },
+      ],
+    }, async () => json);
+    expect(p.trades!.map((t) => t.fxRate)).toEqual([3.66, 3.7, undefined]);
+    await expect(withFxRates({ instruments: [{ symbol: "AAPL", currency: "USD" }], dividends: [{ symbol: "AAPL", account: "regular", date: "2026-10-13", gross: 1 }] },
+      async () => { throw new Error("HTTP 404"); })).rejects.toThrow(/AAPL dividend on 2026-10-13: .*Enter the exchange rate/);
   });
 
   it("reads the PKO DFE unit value from analizy.pl", async () => {

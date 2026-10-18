@@ -212,6 +212,8 @@
       <label>Price per unit <span class="cur" id="priceCur"></span><input name="price" type="number" step="any" min="0" required></label>
       <label>Commission<input name="commission" type="number" step="0.01" value="0"></label>
     </div>
+    <label class="fx" id="tradeFx" hidden>Exchange rate <span class="cur" data-pair></span><input name="fxRate" type="number" step="any" min="0" placeholder="looked up when online"><small data-note></small></label>
+    <p class="fx-info" id="tradeFxInfo" hidden></p>
     <label>Account<select name="account"></select></label>
     <details id="newInstrument"><summary>New instrument? Tell the app where to find its price</summary>
       <div class="row">
@@ -237,6 +239,8 @@
       <label>Gross amount (total)<input name="gross" type="number" step="0.01" min="0" required></label>
       <label>Tax withheld (total)<input name="withheldTax" type="number" step="0.01" min="0"><small>Empty for a Polish dividend: 19% is assumed</small></label>
     </div>
+    <label class="fx" id="divFx" hidden>Exchange rate <span class="cur" data-pair></span><input name="fxRate" type="number" step="any" min="0" placeholder="looked up when online"><small data-note></small></label>
+    <p class="fx-info" id="divFxInfo" hidden></p>
     <label>Account<select name="account"></select></label>
     <button class="btn primary block">Save dividend</button>
   </form>
