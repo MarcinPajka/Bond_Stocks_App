@@ -1,10 +1,12 @@
 // Usage: npx tsx src/cli.ts [portfolio.json] [--offline] [--date YYYY-MM-DD]
-import { buildReport, cachePathFor, loadPortfolio } from "./portfolio.js";
+import { join } from "node:path";
+import { buildReport, cachePathFor, loadPortfolio, withKnownSources } from "./portfolio.js";
+import { defaultDataDir } from "./storage.js";
 
 const args = process.argv.slice(2);
-const file = args.find((a) => a.endsWith(".json")) ?? "portfolio.json";
+const file = args.find((a) => a.endsWith(".json")) ?? join(defaultDataDir(), "portfolio.json");
 const dateIdx = args.indexOf("--date");
-const report = await buildReport(loadPortfolio(file), {
+const report = await buildReport(withKnownSources(loadPortfolio(file)), {
   offline: args.includes("--offline"),
   asOf: dateIdx >= 0 ? args[dateIdx + 1] : undefined,
   cachePath: cachePathFor(file),

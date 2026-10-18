@@ -7,6 +7,7 @@ import { fetchFxRate, fetchQuote } from "./prices/providers.js";
 import { buildPositions, type Dividend, type Instrument, type Position, type Quote, type Trade } from "./stocks/positions.js";
 
 export interface PortfolioFile {
+  version?: number; // file format, see storage.ts
   bonds?: BondLot[];
   instruments?: Instrument[];
   trades?: Trade[];
@@ -27,6 +28,31 @@ export interface Report {
 
 export function loadPortfolio(path: string): PortfolioFile {
   return JSON.parse(readFileSync(path, "utf8"));
+}
+
+const hasSource = (i: Instrument) => Boolean(i.stooq || i.yahoo || i.analizy);
+
+/**
+ * Instruments saved without saying where their price comes from get it from the app's
+ * instrument list (the sample portfolio's instruments), e.g. PKODFE is the analizy.pl fund
+ * EBAN2. Only fills gaps: anything set on your own instrument wins. The file isn't changed.
+ */
+export function withKnownSources(p: PortfolioFile, known: Instrument[] = knownInstruments()): PortfolioFile {
+  if (!p.instruments?.some((i) => !hasSource(i))) return p;
+  const bySymbol = new Map(known.filter(hasSource).map((k) => [k.symbol.toUpperCase(), k]));
+  const instruments = p.instruments.map((i) => {
+    const k = hasSource(i) ? undefined : bySymbol.get(i.symbol.toUpperCase());
+    return k ? { ...i, stooq: k.stooq, yahoo: k.yahoo, analizy: k.analizy, currency: i.currency ?? k.currency, name: i.name ?? k.name } : i;
+  });
+  return { ...p, instruments };
+}
+
+export function knownInstruments(): Instrument[] {
+  try {
+    return JSON.parse(readFileSync(new URL("../portfolio.example.json", import.meta.url), "utf8")).instruments ?? [];
+  } catch {
+    return [];
+  }
 }
 
 /** Where fetched bond terms, CPI and NBP rates are kept: next to the portfolio file. */

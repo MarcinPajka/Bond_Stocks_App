@@ -32,7 +32,16 @@ Then:
 npm install
 npm start          # open http://localhost:5173
 ```
-Your data is saved to `portfolio.json` next to the code (ignored by git). Use "Load sample data" to try it with made-up holdings. The server listens on localhost only. `OFFLINE=1 npm start` skips live prices and uses the manual `prices` in the file; `PORTFOLIO=/path/file.json` uses another data file.
+Your data is kept outside the app folder, so updating the app (`git pull`, or downloading it again) never touches it:
+- Windows: `%APPDATA%\portfel\portfolio.json`
+- macOS: `~/Library/Application Support/portfel/portfolio.json`
+- Linux: `~/.local/share/portfel/portfolio.json`
+
+The Entries page shows the exact path. Older versions kept `portfolio.json` next to the code; it is copied over automatically the first time a new version starts. Each save keeps the previous version as `portfolio.backup.json`, and a file saved by a newer, incompatible version of the app is never overwritten by an older one. `PORTFEL_DATA=/some/folder` moves the data folder; `PORTFOLIO=/path/file.json` uses another data file.
+
+Use "Load sample data" to try it with made-up holdings. The server listens on localhost only. `OFFLINE=1 npm start` skips live prices and uses the manual `prices` in the file.
+
+Each share or fund needs a price source: GPW shares need nothing; foreign ETFs need their stooq or Yahoo symbol; funds need their analizy.pl id (open the holding and press "Price source"). Instruments the app already knows from its sample list, such as PKODFE, get theirs filled in automatically.
 
 ## Command-line report
 ```

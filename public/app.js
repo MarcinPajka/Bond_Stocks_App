@@ -412,6 +412,7 @@ function entryList() {
 }
 
 function renderEntries() {
+  $("#dataFile").textContent = state.data.dataFile ? `Saved on this computer in ${state.data.dataFile}. Updating the app never changes this file; each save keeps the previous version as a backup next to it.` : "";
   const q = $("#entrySearch").value.trim().toLowerCase();
   const list = entryList().filter((e) => !q || `${e.main} ${e.sub}`.toLowerCase().includes(q));
   const box = $("#entries");
@@ -520,7 +521,9 @@ function openInstrument(symbol) {
   state.selling = null;
   resetDialog();
   $("#formTabs").hidden = true;
-  const inst = (state.portfolio.instruments ?? []).find((i) => i.symbol === symbol) ?? { symbol, currency: "PLN" };
+  const saved = (state.portfolio.instruments ?? []).find((i) => i.symbol === symbol);
+  const inUse = (state.data.instruments ?? []).find((i) => i.symbol === symbol); // includes a source the app filled in
+  const inst = { currency: "PLN", ...inUse, ...saved, ...(saved && !saved.analizy && !saved.stooq && !saved.yahoo ? inUse : {}) };
   const f = $("#form-instrument");
   for (const k of ["name", "currency", "analizy", "stooq", "yahoo"]) f.elements[k].value = inst[k] ?? "";
   $("#instSymbol").textContent = symbol;

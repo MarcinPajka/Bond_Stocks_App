@@ -1,28 +1,36 @@
 // Local, private web app: npm start, then open http://localhost:5173
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildReport, cachePathFor, type PortfolioFile, type Report } from "./portfolio.js";
+import { buildReport, cachePathFor, withKnownSources, type PortfolioFile, type Report } from "./portfolio.js";
+import { checkCompatible, defaultDataDir, migrateFromAppFolder, readPortfolioFile, writePortfolioFile } from "./storage.js";
 import { contributions, incomeByYear, projectBonds, upcomingEvents } from "./insights.js";
 import { toRows } from "./view.js";
 import { loadPriceHistory, recordQuotes, refreshPriceHistory, valueHistory } from "./history.js";
 import { today } from "./bonds/dates.js";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const PORTFOLIO = process.env.PORTFOLIO ?? join(root, "portfolio.json");
+const DATA_DIR = defaultDataDir();
+const PORTFOLIO = process.env.PORTFOLIO ?? join(DATA_DIR, "portfolio.json");
+if (!process.env.PORTFOLIO) {
+  const moved = migrateFromAppFolder(root, DATA_DIR);
+  if (moved.length) console.log(`Copied your data (${moved.join(", ")}) from the app folder to ${DATA_DIR}`);
+}
 const OFFLINE = process.env.OFFLINE === "1";
 const PORT = Number(process.env.PORT ?? 5173);
 const CACHE_MS = 5 * 60_000;
 const MARKET_CACHE = cachePathFor(PORTFOLIO);
 const PRICE_HISTORY = join(dirname(PORTFOLIO), "price-history.cache.json");
 
-const readPortfolio = (): PortfolioFile => (existsSync(PORTFOLIO) ? JSON.parse(readFileSync(PORTFOLIO, "utf8")) : {});
+const readPortfolio = (): PortfolioFile => readPortfolioFile(PORTFOLIO);
+/** The portfolio as the calculators see it: price sources filled in where the file has none. */
+const portfolioForReport = (): PortfolioFile => withKnownSources(readPortfolio());
 
 let cache: { key: string; at: number; report: Report; body: unknown } | undefined;
 
 async function report(date: string | undefined, refresh: boolean) {
-  const portfolio = readPortfolio();
+  const portfolio = portfolioForReport();
   const key = JSON.stringify([portfolio, date]);
   if (!refresh && cache && cache.key === key && Date.now() - cache.at < CACHE_MS) return cache;
   const r = await buildReport(portfolio, { offline: OFFLINE, asOf: date, cachePath: MARKET_CACHE });
@@ -36,7 +44,9 @@ async function report(date: string | undefined, refresh: boolean) {
     offline: OFFLINE,
     rows,
     summary,
-    warnings: r.warnings,
+    warnings: [...compatibilityWarning(portfolio), ...r.warnings],
+    dataFile: PORTFOLIO,
+    instruments: portfolio.instruments ?? [], // with price sources filled in
     events: upcomingEvents(r.bonds, r.asOf),
     income: incomeByYear(r),
     contributions: contributions(r, year, portfolio.settings?.ikzeSelfEmployed),
@@ -49,12 +59,21 @@ async function report(date: string | undefined, refresh: boolean) {
   return cache;
 }
 
+function compatibilityWarning(p: PortfolioFile): string[] {
+  try {
+    checkCompatible(p);
+    return [];
+  } catch (e) {
+    return [(e as Error).message];
+  }
+}
+
 let historyCache: { key: string; at: number; body: unknown } | undefined;
 
 /** Value over time for the whole portfolio and each holding. Fetches price history as needed. */
 async function history(refresh: boolean) {
   const { report: r } = await report(undefined, false);
-  const portfolio = readPortfolio();
+  const portfolio = portfolioForReport();
   const key = JSON.stringify([portfolio, r.asOf]);
   if (!refresh && historyCache && historyCache.key === key && Date.now() - historyCache.at < CACHE_MS) return historyCache.body;
   let warnings: string[] = [];
@@ -100,9 +119,9 @@ createServer(async (req, res) => {
     if (url.pathname === "/api/portfolio" && req.method === "PUT") {
       const next: PortfolioFile = JSON.parse(await readBody(req));
       // Reject data the calculators can't handle; this also fetches terms for new bond series.
-      await buildReport(next, { offline: OFFLINE, cachePath: MARKET_CACHE, skipPrices: true, strict: true });
-      await buildReport(next, { offline: true, cachePath: MARKET_CACHE, skipPrices: false });
-      writeFileSync(PORTFOLIO, JSON.stringify(next, null, 2));
+      await buildReport(withKnownSources(next), { offline: OFFLINE, cachePath: MARKET_CACHE, skipPrices: true, strict: true });
+      await buildReport(withKnownSources(next), { offline: true, cachePath: MARKET_CACHE, skipPrices: false });
+      writePortfolioFile(PORTFOLIO, next);
       cache = undefined;
       return send(res, 200, { ok: true });
     }
