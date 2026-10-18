@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { valueBond, type MarketData } from "../src/bonds/bond.js";
 import { businessDaysBefore, isPolishHoliday } from "../src/bonds/dates.js";
-import { loadBondData, valueLot } from "../src/bonds/lot.js";
+import { valueLot } from "../src/bonds/lot.js";
+import { testMarketData } from "./fixtures/market.js";
 
 const market: MarketData = {
   cpi: { "2027-08": 3.0 },
@@ -26,7 +27,7 @@ describe("COI (yearly payout, inflation-indexed)", () => {
   });
 
   it("taxes each payout and the remaining gain", () => {
-    const data = { ...loadBondData(), ...market };
+    const data = { ...testMarketData(), ...market };
     const r = valueLot({ series: "COI1030", purchaseDate: "2026-10-01", quantity: 10, account: "regular" }, data, "2028-04-01");
     expect(r).toMatchObject({ cost: 1000, value: 1022.5, interestPaid: 47.5, gain: 70, tax: 13, netGain: 57 });
     expect(r.redemptionValue).toBe(1002.5);
@@ -68,7 +69,7 @@ describe("TOS and OTS (fixed rate)", () => {
 
 describe("accounts and calendar", () => {
   it("charges no early-redemption fee on IKE", () => {
-    const data = loadBondData();
+    const data = testMarketData();
     const r = valueLot({ series: "EDO1035", purchaseDate: "2025-10-15", quantity: 10, account: "IKE" }, data, "2026-10-14");
     expect(r.redemptionValue).toBe(r.value);
   });
@@ -82,7 +83,7 @@ describe("accounts and calendar", () => {
   it("accepts terms on the holding for series not in the table", () => {
     const r = valueLot(
       { series: "EDO0124", purchaseDate: "2024-01-10", quantity: 1, account: "regular", terms: { firstYearRate: 7.0, margin: 1.5, earlyFee: 2.0 } },
-      loadBondData(),
+      testMarketData(),
       "2025-01-10",
     );
     expect(r.value).toBe(107);

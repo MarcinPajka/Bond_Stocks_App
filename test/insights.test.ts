@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { buildReport, type PortfolioFile } from "../src/portfolio.js";
+import { testMarketData } from "./fixtures/market.js";
 import { contributions, incomeByYear, projectBonds, upcomingEvents } from "../src/insights.js";
 
 const sample: PortfolioFile = JSON.parse(readFileSync(new URL("../portfolio.example.json", import.meta.url), "utf8"));
-const report = await buildReport(sample, { offline: true, asOf: "2026-10-14" });
+const report = await buildReport(sample, { offline: true, asOf: "2026-10-14", marketData: testMarketData() });
 
 describe("insights on the sample portfolio", () => {
   it("lists upcoming bond events with known amounts", () => {

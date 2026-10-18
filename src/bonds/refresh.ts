@@ -27,6 +27,7 @@ const PRODUCT_SLUGS: Record<string, string> = {
 const GUS_CPI_URL =
   "https://stat.gov.pl/obszary-tematyczne/ceny-handel/wskazniki-cen/wskazniki-cen-towarow-i-uslug-konsumpcyjnych-pot-inflacja-/miesieczne-wskazniki-cen-towarow-i-uslug-konsumpcyjnych-od-1982-roku";
 const NBP_RATES_URL = "https://static.nbp.pl/dane/stopy/stopy_procentowe.xml";
+const NBP_ARCHIVE_URL = "https://static.nbp.pl/dane/stopy/stopy_procentowe_archiwum.xml";
 const REFRESH_EVERY_MS = 12 * 3600_000;
 
 export interface MarketCache {
@@ -134,26 +135,36 @@ export function parseNbpRatesXml(xml: string): { date: IsoDate; rate: number } {
   return { date: date[1], rate: num(rate[1]) };
 }
 
+/** Every reference-rate change from the NBP archive: <pozycje obowiazuje_od="..."><pozycja id="ref" .../>. */
+export function parseNbpArchiveXml(xml: string): Record<IsoDate, number> {
+  const out: Record<IsoDate, number> = {};
+  for (const block of xml.match(/<pozycje\b[\s\S]*?<\/pozycje>/gi) ?? []) {
+    const date = block.match(/obowiazuje_od\s*=\s*"(\d{4}-\d{2}-\d{2})"/);
+    const ref = block.match(/<pozycja\b[^>]*\bid\s*=\s*"ref"[^>]*>/);
+    const rate = ref?.[0].match(/oprocentowanie\s*=\s*"([\d,]+)"/);
+    if (date && rate) out[date[1]] = num(rate[1]);
+  }
+  if (Object.keys(out).length === 0) throw new Error("NBP archive XML: no reference rates found");
+  return out;
+}
+
 export function loadCache(path: string): MarketCache {
   if (!existsSync(path)) return { series: {}, cpi: {}, nbpReference: {} };
   return { series: {}, cpi: {}, nbpReference: {}, ...JSON.parse(readFileSync(path, "utf8")) };
 }
 
-/** Bundled data overlaid with whatever has been fetched. */
-export function mergeData(bundled: BondData, cache: MarketCache): BondData {
-  return {
-    series: { ...bundled.series, ...cache.series },
-    cpi: { ...bundled.cpi, ...cache.cpi },
-    nbpReference: { ...bundled.nbpReference, ...cache.nbpReference },
-  };
-}
+export const cacheData = (cache: MarketCache): BondData => ({
+  series: cache.series,
+  cpi: cache.cpi,
+  nbpReference: cache.nbpReference,
+});
 
 /**
- * Fetches what is missing or stale and saves it to the cache. Problems become warnings;
- * the bundled data still works without them.
+ * Fetches what is missing or stale and saves it to the cache. Nothing is bundled with the
+ * app: series terms, the CPI history and NBP rate history all come from the live sites.
+ * Problems become warnings; the last fetched data in the cache is used until they're fixed.
  */
 export async function refreshBondData(
-  bundled: BondData,
   cachePath: string | undefined,
   neededSeries: string[],
   get: Fetcher = httpFetch,
@@ -163,7 +174,7 @@ export async function refreshBondData(
   const warnings: string[] = [];
   let changed = false;
 
-  const known = mergeData(bundled, cache).series;
+  const known = cache.series;
   for (const s of new Set(neededSeries.map((x) => x.toUpperCase()))) {
     if (known[s]) continue;
     try {
@@ -175,7 +186,9 @@ export async function refreshBondData(
   }
 
   cache.checkedAt ??= {};
-  if (now - (cache.checkedAt.cpi ?? 0) > REFRESH_EVERY_MS) {
+  const stale = (key: "cpi" | "nbp", data: object) =>
+    Object.keys(data).length === 0 || now - (cache.checkedAt?.[key] ?? 0) > REFRESH_EVERY_MS;
+  if (stale("cpi", cache.cpi)) {
     try {
       Object.assign(cache.cpi, parseGusCpiPage(await get(GUS_CPI_URL)));
       cache.checkedAt.cpi = now;
@@ -184,8 +197,10 @@ export async function refreshBondData(
       warnings.push(`Inflation data not updated from GUS (${(e as Error).message})`);
     }
   }
-  if (now - (cache.checkedAt.nbp ?? 0) > REFRESH_EVERY_MS) {
+  if (stale("nbp", cache.nbpReference)) {
     try {
+      Object.assign(cache.nbpReference, parseNbpArchiveXml(await get(NBP_ARCHIVE_URL)));
+      // The current-rates file can be a step ahead of the archive.
       const { date, rate } = parseNbpRatesXml(await get(NBP_RATES_URL));
       cache.nbpReference[date] = rate;
       cache.checkedAt.nbp = now;
@@ -196,5 +211,5 @@ export async function refreshBondData(
   }
 
   if (changed && cachePath) writeFileSync(cachePath, JSON.stringify(cache, null, 2));
-  return { data: mergeData(bundled, cache), warnings };
+  return { data: cacheData(cache), warnings };
 }

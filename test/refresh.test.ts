@@ -104,27 +104,28 @@ describe("refreshBondData", () => {
   it("fetches unknown series once, updates CPI and NBP, and caches them", async () => {
     const dir = mkdtempSync(join(tmpdir(), "pt-"));
     const cachePath = join(dir, "cache.json");
-    const bundled = { series: {}, cpi: { "2026-07": 3.0 }, nbpReference: { "2026-03-05": 3.75 } };
     const asked: string[] = [];
     const get = async (url: string) => {
       asked.push(url);
       if (url.includes("edo0136")) return page("5,35% w pierwszym rocznym okresie odsetkowym", "marża 2,00% + inflacja", ...FEES("dziesięcioletniej", "2,00", "3,00"));
       if (url.includes("stat.gov.pl")) return `<p>Analogiczny miesiąc poprzedniego roku = 100</p><table><tr><td>2026</td><td>102,1</td><td>102,1</td><td>103,0</td><td>103,2</td><td>103,1</td><td>102,5</td><td>103,0</td><td>103,4</td></tr></table>`;
+      if (url.includes("archiwum")) return `<stopy_procentowe_archiwum><pozycje obowiazuje_od="2025-12-04"><pozycja id="ref" oprocentowanie="4,00" /><pozycja id="lom" oprocentowanie="4,50" /></pozycje>
+        <pozycje\n obowiazuje_od="2026-03-05"><pozycja\n id="lom" oprocentowanie="4,25" /><pozycja\n id="ref"\n oprocentowanie="3,75" /></pozycje></stopy_procentowe_archiwum>`;
       if (url.includes("nbp.pl")) return `<pozycja id="ref" oprocentowanie="3,50" obowiazuje_od="2026-11-05" />`;
       throw new Error("HTTP 404");
     };
 
-    const r = await refreshBondData(bundled, cachePath, ["EDO0136", "edo0136", "XYZ0101"], get, 1e13);
+    const r = await refreshBondData(cachePath, ["EDO0136", "edo0136", "XYZ0101"], get, 1e13);
     expect(asked.filter((u) => u.includes("edo0136"))).toHaveLength(1);
     expect(r.data.series.EDO0136).toEqual({ firstYearRate: 5.35, margin: 2, earlyFee: 3 });
     expect(r.data.cpi["2026-08"]).toBe(3.4);
-    expect(r.data.nbpReference["2026-11-05"]).toBe(3.5);
+    expect(r.data.nbpReference).toEqual({ "2025-12-04": 4, "2026-03-05": 3.75, "2026-11-05": 3.5 });
     expect(r.warnings.join()).toMatch(/XYZ0101/);
     expect(JSON.parse(readFileSync(cachePath, "utf8")).series.EDO0136.firstYearRate).toBe(5.35);
 
     // Second run within 12 hours: nothing refetched.
     asked.length = 0;
-    await refreshBondData(bundled, cachePath, ["EDO0136"], get, 1e13 + 1000);
+    await refreshBondData(cachePath, ["EDO0136"], get, 1e13 + 1000);
     expect(asked).toEqual([]);
   });
 });

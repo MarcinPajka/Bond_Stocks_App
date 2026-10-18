@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { today, type IsoDate } from "./bonds/dates.js";
-import { loadBondData, valueLot, type BondData, type BondLot, type BondLotValuation } from "./bonds/lot.js";
-import { loadCache, mergeData, refreshBondData } from "./bonds/refresh.js";
+import { emptyBondData, valueLot, type BondData, type BondLot, type BondLotValuation } from "./bonds/lot.js";
+import { cacheData, loadCache, refreshBondData } from "./bonds/refresh.js";
 import { fetchFxRate, fetchQuote } from "./prices/providers.js";
 import { buildPositions, type Dividend, type Instrument, type Position, type Quote, type Trade } from "./stocks/positions.js";
 
@@ -21,7 +21,7 @@ export interface Report {
   bonds: BondLotValuation[];
   positions: Position[];
   trades: Trade[]; // with exchange rates filled in
-  bondData: BondData; // bundled + fetched terms, CPI and NBP rates used for the valuation
+  bondData: BondData; // fetched terms, CPI and NBP rates used for the valuation
   warnings: string[];
 }
 
@@ -39,6 +39,8 @@ export interface ReportOptions {
   skipPrices?: boolean;
   /** Throw on any bond that can't be valued, instead of reporting it as a warning. */
   strict?: boolean;
+  /** Use these terms, CPI and NBP rates instead of fetching (tests). */
+  marketData?: BondData;
 }
 
 export async function buildReport(p: PortfolioFile, opts: ReportOptions = {}): Promise<Report> {
@@ -46,11 +48,10 @@ export async function buildReport(p: PortfolioFile, opts: ReportOptions = {}): P
   const warnings: string[] = [];
 
   const lots = p.bonds ?? [];
-  const bundled = loadBondData();
-  let bondData = opts.cachePath ? mergeData(bundled, loadCache(opts.cachePath)) : bundled;
-  if (!opts.offline) {
+  let bondData = opts.marketData ?? (opts.cachePath ? cacheData(loadCache(opts.cachePath)) : emptyBondData());
+  if (!opts.offline && !opts.marketData) {
     const needed = lots.filter((l) => !l.terms).map((l) => l.series);
-    const refreshed = await refreshBondData(bundled, opts.cachePath, needed);
+    const refreshed = await refreshBondData(opts.cachePath, needed);
     bondData = refreshed.data;
     warnings.push(...refreshed.warnings);
   }

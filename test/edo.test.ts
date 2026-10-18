@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { valueBond as value, type MarketData, type SeriesTerms } from "../src/bonds/bond.js";
-import { loadBondData, valueLot } from "../src/bonds/lot.js";
+import { valueLot } from "../src/bonds/lot.js";
+import { testMarketData } from "./fixtures/market.js";
 import { addYears } from "../src/bonds/dates.js";
 
 const EDO1035: SeriesTerms = { firstYearRate: 6.0, margin: 2.0, earlyFee: 3.0 };
@@ -70,7 +71,7 @@ describe("EDO valuation", () => {
 
 describe("EDO lot", () => {
   it("computes gain with and without Belka tax", () => {
-    const data = loadBondData();
+    const data = testMarketData();
     const lot = { series: "EDO1035", purchaseDate: "2025-10-15", quantity: 10, account: "regular" as const };
     const r = valueLot(lot, data, "2026-10-14");
     expect(r).toMatchObject({ cost: 1000, value: 1059.8, gain: 59.8, tax: 11, netGain: 48.8 });
@@ -79,7 +80,7 @@ describe("EDO lot", () => {
   });
 
   it("skips Belka on IKE", () => {
-    const data = loadBondData();
+    const data = testMarketData();
     const r = valueLot({ series: "EDO1035", purchaseDate: "2025-10-15", quantity: 10, account: "IKE" }, data, "2026-10-14");
     expect(r.netGain).toBe(59.8);
   });

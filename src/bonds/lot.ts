@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { belkaTax, type AccountType } from "../tax.js";
 import { today, type IsoDate } from "./dates.js";
 import { PRODUCTS, valueBond, type BondValuation, type MarketData, type SeriesTerms } from "./bond.js";
@@ -9,7 +8,7 @@ export interface BondLot {
   quantity: number;
   pricePerBond?: number; // 100, or 99.90 when bought by exchange (zamiana)
   account: AccountType;
-  terms?: SeriesTerms; // only needed when the series is not in data/bond-series.json
+  terms?: SeriesTerms; // only needed when its terms can't be fetched from obligacjeskarbowe.pl
 }
 
 export interface BondLotValuation {
@@ -29,14 +28,7 @@ export interface BondData extends MarketData {
   series: Record<string, SeriesTerms>;
 }
 
-export function loadBondData(dataDir = new URL("../../data/", import.meta.url)): BondData {
-  const read = (f: string) => JSON.parse(readFileSync(new URL(f, dataDir), "utf8"));
-  return {
-    cpi: read("cpi.json").yoyPercent,
-    nbpReference: read("nbp-reference-rate.json").changes,
-    series: read("bond-series.json").series,
-  };
-}
+export const emptyBondData = (): BondData => ({ series: {}, cpi: {}, nbpReference: {} });
 
 export function termsFor(lot: BondLot, data: BondData): SeriesTerms {
   const terms = lot.terms ?? data.series[lot.series.toUpperCase()];
