@@ -21,7 +21,8 @@ export interface Row {
   netIncome: number | null; // after Belka
   ifSoldNow?: number; // bonds: net gain after early-redemption fee and Belka
   redemptionValue?: number; // bonds: cash back if redeemed today, after the fee, before tax
-  price?: { value: number; currency: string; date: string };
+  price?: { value: number; currency: string; date: string; pln: number }; // current, per unit
+  bought?: { avg: number; currency: string; avgPln: number; lots: { date: string; quantity: number; price: number }[] }; // per unit
   breakdown: Record<string, number>;
 }
 
@@ -50,6 +51,11 @@ export function toRows(report: Report, instruments: Instrument[] = [], bondEntri
       netIncome: b.netGain,
       ifSoldNow: b.redeemed || b.valuation.matured ? undefined : b.redemptionNetGain,
       redemptionValue: b.redeemed || b.valuation.matured ? undefined : b.redemptionValue,
+      price: b.redeemed ? undefined : { value: b.valuation.valuePerBond, currency: "PLN", date: b.valuation.asOf, pln: b.valuation.valuePerBond },
+      bought: (() => {
+        const price = b.lot.pricePerBond ?? 100;
+        return { avg: price, currency: "PLN", avgPln: price, lots: [{ date: b.lot.purchaseDate, quantity: b.lot.quantity, price }] };
+      })(),
       breakdown: b.redeemed
         ? { "Received on redemption": b.redeemed.proceeds, "Interest paid out": b.interestPaid, "Belka": b.tax }
         : { "Interest paid out": b.interestPaid, "Accrued in value": Math.round((b.value - b.cost) * 100) / 100, "Belka": b.tax },
@@ -64,7 +70,10 @@ export function toRows(report: Report, instruments: Instrument[] = [], bondEntri
       assetClass: inst?.analizy ? "Funds" : "Shares & ETFs",
       name: s.symbol,
       detail: inst?.name ?? s.symbol,
-      price: s.price !== undefined ? { value: s.price, currency: s.priceCurrency ?? inst?.currency ?? "PLN", date: s.priceDate! } : undefined,
+      price: s.price !== undefined
+        ? { value: s.price, currency: s.priceCurrency ?? inst?.currency ?? "PLN", date: s.priceDate!, pln: s.pricePln ?? s.price }
+        : undefined,
+      bought: s.quantity > 1e-9 ? { avg: s.avgPrice, currency: inst?.currency ?? "PLN", avgPln: s.avgCost, lots: s.openLots } : undefined,
       account: s.account,
       quantity: +s.quantity.toFixed(4),
       cost: s.costPln,

@@ -198,22 +198,22 @@ input[type=checkbox] { width: auto; accent-color: var(--accent); }
 
 /* tables */
 table.holdings { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-.holdings th { text-align: left; font-size: 12px; font-weight: 500; color: var(--muted); padding: 12px 16px; border-bottom: 1px solid var(--border);
+.holdings th { text-align: left; font-size: 12px; font-weight: 500; color: var(--muted); padding: 12px 12px; border-bottom: 1px solid var(--border);
   background: var(--surface-2); white-space: nowrap; user-select: none; }
 .holdings th[data-sort] { cursor: pointer; }
 .holdings th[data-sort]:hover { color: var(--text); }
 .holdings th.sorted::after { content: " ↓"; }
 .holdings th.sorted.asc::after { content: " ↑"; }
-.holdings td { padding: 13px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.holdings td { padding: 13px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .holdings tr:last-child td { border-bottom: 0; }
 .holdings tr.main { cursor: pointer; }
 .holdings tr.main:hover td { background: var(--hover); }
 .holdings .name { display: flex; align-items: center; gap: 12px; }
 .avatar { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; flex: none; letter-spacing: .02em; }
 .holdings .name b { display: block; font-weight: 600; }
-.holdings .name small { color: var(--muted); font-size: 12px; display: block; max-width: 380px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.holdings .name small { color: var(--muted); font-size: 12px; display: block; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .badge { display: inline-block; font-size: 12px; font-weight: 500; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-2); }
-.badge.m { display: none; margin-left: 4px; vertical-align: 1px; font-size: 11px; padding: 1px 7px; }
+.badge.m { display: inline-block; margin-left: 4px; vertical-align: 1px; font-size: 11px; padding: 1px 7px; }
 .badge.tax-free { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 tr.details td { background: var(--surface-2); padding: 14px 16px 16px 64px; }
 .breakdown { display: flex; flex-wrap: wrap; gap: 10px 28px; font-size: 13px; }
@@ -303,10 +303,10 @@ dialog::backdrop { background: rgba(10, 12, 16, .45); backdrop-filter: blur(2px)
   .holdings tr.main { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
   .holdings tr.main td { padding: 0; border: 0; background: none !important; }
   .holdings tr.main td:nth-child(1) { grid-column: 1; grid-row: 1 / span 2; }
-  .holdings tr.main td:nth-child(2), .holdings tr.main td:nth-child(3), .holdings tr.main td:nth-child(4) { display: none; }
-  .holdings tr.main td:nth-child(5) { grid-column: 2; grid-row: 1; font-weight: 600; }
-  .holdings tr.main td:nth-child(6) { grid-column: 2; grid-row: 2; font-size: 12.5px; }
-  .holdings tr.main td:nth-child(7) { display: none; }
+  .holdings tr.main td:nth-child(n+2):nth-child(-n+5) { display: none; }
+  .holdings tr.main td:nth-child(6) { grid-column: 2; grid-row: 1; font-weight: 600; }
+  .holdings tr.main td:nth-child(7) { grid-column: 2; grid-row: 2; font-size: 12.5px; }
+  .holdings tr.main td:nth-child(7) small { display: none; }
   .holdings .name small { max-width: 190px; }
   .badge.m { display: inline-block; }
   tr.details td { display: block; padding: 12px 14px; }
@@ -339,3 +339,16 @@ tr.closed .avatar { opacity: .55; }
   .detail-grid { grid-template-columns: 1fr; }
 }
 .form .cur { color: var(--muted); font-weight: 400; }
+.holdings td.two small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 1px; white-space: nowrap; }
+.holdings td.two { white-space: nowrap; }
+.purchases { font-size: 13px; }
+.purchases .now { margin-bottom: 8px; color: var(--text-2); }
+.purchases .now b { color: var(--text); font-variant-numeric: tabular-nums; }
+.purchases .lots-head { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+.purchases ul { list-style: none; margin: 0; padding: 0; max-height: 132px; overflow: auto; }
+.purchases li { display: flex; justify-content: space-between; gap: 16px; padding: 3px 0; border-top: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.purchases li:first-child { border-top: 0; }
+.purchases li span:first-child { color: var(--text-2); }
+.holdings td.two small.up { color: var(--up); }
+.holdings td.two small.down { color: var(--down); }
+#page-holdings .card.flush { overflow-x: auto; }

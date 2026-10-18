@@ -222,9 +222,30 @@ function renderOverview() {
     : `<li class="empty-list">Add holdings to see how they're doing.</li>`;
 }
 
-function priceText(p) {
-  const v = p.value.toLocaleString("pl-PL", { maximumFractionDigits: 4 });
-  return `${v} ${p.currency === "PLN" ? "zł" : p.currency} on ${dateFmt(p.date, { day: "numeric", month: "short" })}`;
+/** A per-unit price in its own currency: 654,20 zł, 170,44 €, 0,1234 $. */
+const money = (v, currency = "PLN") =>
+  v == null ? "–" : v.toLocaleString("pl-PL", { style: "currency", currency, minimumFractionDigits: 2, maximumFractionDigits: Math.abs(v) < 10 ? 4 : 2 });
+const shortDate = (d) => dateFmt(d, { day: "numeric", month: "short", year: "2-digit" });
+
+function priceCells(r) {
+  const p = r.price, b = r.bought;
+  const now = p
+    ? `${money(p.value, p.currency)}<small>${p.currency !== "PLN" ? pln(p.pln) : r.kind === "bond" ? "value per bond" : shortDate(p.date)}</small>`
+    : `–<small>${r.kind === "stock" && !r.closed ? "no price" : ""}</small>`;
+  const bought = b
+    ? `${money(b.avg, b.currency)}<small>${b.lots.length > 1 ? `average of ${b.lots.length} buys` : shortDate(b.lots[0].date)}</small>`
+    : "–";
+  return `<td class="num two">${now}</td><td class="num two">${bought}</td>`;
+}
+
+function purchasesBlock(r) {
+  const p = r.price, b = r.bought;
+  if (!b && !p) return "";
+  const nowLine = p && r.kind === "stock"
+    ? `<div class="now">Price now <b>${money(p.value, p.currency)}</b>${p.currency !== "PLN" ? ` = ${pln(p.pln)}` : ""} · ${dateFmt(p.date)}</div>` : "";
+  const lots = (b?.lots ?? []).map((l) =>
+    `<li><span>${dateFmt(l.date)}</span><span>${l.quantity.toLocaleString("pl-PL")} × ${money(l.price, b.currency)}</span></li>`).join("");
+  return `<div class="purchases">${nowLine}${lots ? `<div class="lots-head">${r.kind === "bond" ? "Bought" : "Bought (still held)"}</div><ul>${lots}</ul>` : ""}</div>`;
 }
 
 function avatar(r) {
@@ -259,7 +280,7 @@ function renderHoldings() {
   $("#closedChip").textContent = `Show sold (${closedCount})`;
 
   const { key, asc } = state.sort;
-  const val = (r) => ({ name: r.name, account: r.account, quantity: r.quantity, cost: r.cost, value: r.value ?? -Infinity,
+  const val = (r) => ({ name: r.name, account: r.account, quantity: r.quantity, price: r.price?.pln ?? -Infinity, cost: r.cost, value: r.value ?? -Infinity,
     gain: gainOf(r) ?? -Infinity, ret: r.cost ? (gainOf(r) ?? 0) / r.cost : 0 })[key];
   const list = filteredRows().sort((a, b) => {
     const x = val(a), y = val(b);
@@ -287,17 +308,16 @@ function renderHoldings() {
       + (r.kind === "stock" ? `<button class="btn small ghost" data-source="${esc(r.name)}">Price source</button>` : "");
     const closedBadge = r.closed ? ` <span class="badge sold">${r.kind === "bond" ? "Redeemed" : "Sold"}</span>` : "";
     return `<tr class="main${r.closed ? " closed" : ""}" data-id="${esc(id)}">
-        <td><div class="name">${avatar(r)}<div><b>${esc(r.name)} <span class="badge m ${r.account === "regular" ? "" : "tax-free"}">${accountName(r.account)}</span>${closedBadge}</b><small title="${esc(r.detail)}">${esc(r.detail)}${r.price ? ` · ${priceText(r.price)}` : r.kind === "stock" ? " · no price" : ""}</small></div></div></td>
-        <td><span class="badge ${r.account === "regular" ? "" : "tax-free"}">${accountName(r.account)}</span></td>
+        <td><div class="name">${avatar(r)}<div><b>${esc(r.name)} <span class="badge m ${r.account === "regular" ? "" : "tax-free"}">${accountName(r.account)}</span>${closedBadge}</b><small title="${esc(r.detail)}">${esc(r.detail)}</small></div></div></td>
         <td class="num">${r.quantity.toLocaleString("pl-PL")}</td>
+        ${priceCells(r)}
         <td class="num">${pln(r.cost)}</td>
         <td class="num">${pln(r.value)}</td>
-        <td class="num ${cls(g)}">${signed(g)}</td>
-        <td class="num ${cls(g)}">${pct(g != null && r.cost ? (g / r.cost) * 100 : null)}</td>
+        <td class="num two ${cls(g)}">${signed(g)}<small class="${cls(g)}">${pct(g != null && r.cost ? (g / r.cost) * 100 : null)}</small></td>
       </tr>
       <tr class="details" ${state.open.has(id) ? "" : "hidden"}><td colspan="7"><div class="detail-grid">
         <div class="chart mini" data-h="150" data-row="${esc(id)}"></div>
-        <div class="detail-side"><div class="breakdown">${parts.join("")}</div>${action ? `<div class="detail-actions">${action}</div>` : ""}</div>
+        <div class="detail-side">${purchasesBlock(r)}<div class="breakdown">${parts.join("")}</div>${action ? `<div class="detail-actions">${action}</div>` : ""}</div>
       </div></td></tr>`;
   }).join("");
   $$("#holdingsTable .chart.mini").forEach((c) => { if (!c.closest("tr").hidden) drawRowChart(c); });

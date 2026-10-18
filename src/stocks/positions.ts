@@ -54,10 +54,13 @@ export interface Position {
   account: AccountType;
   quantity: number;
   costPln: number; // of shares still held, commissions included
-  avgCost: number; // per share, PLN
+  avgCost: number; // per share, PLN, commissions included
+  avgPrice: number; // average price paid per share for those still held, in the instrument's currency
+  openLots: { date: IsoDate; quantity: number; price: number }[]; // buys still held (FIFO), instrument currency
   price?: number; // in priceCurrency
   priceDate?: IsoDate;
   priceCurrency?: string;
+  pricePln?: number; // current price per share in PLN
   valuePln?: number;
   unrealizedPln?: number;
   realizedPln: number;
@@ -99,7 +102,7 @@ export function buildPositions(
     const inst = bySymbol.get(symbol);
     if (!inst) throw new Error(`No instrument entry for ${symbol}`);
 
-    const lots: { qty: number; costPerShare: number }[] = [];
+    const lots: { qty: number; costPerShare: number; date: IsoDate; price: number }[] = [];
     let realized = 0;
     const sales: Position["sales"] = [];
     const own = trades
@@ -109,7 +112,7 @@ export function buildPositions(
       const rate = fx(inst.currency, t.fxRate, `${symbol} ${t.type} on ${t.date}`);
       const commission = (t.commission ?? 0) * rate;
       if (t.type === "buy") {
-        lots.push({ qty: t.quantity, costPerShare: (t.quantity * t.price * rate + commission) / t.quantity });
+        lots.push({ qty: t.quantity, costPerShare: (t.quantity * t.price * rate + commission) / t.quantity, date: t.date, price: t.price });
         continue;
       }
       let left = t.quantity;
@@ -148,6 +151,8 @@ export function buildPositions(
       quantity,
       costPln,
       avgCost: quantity ? round2(costPln / quantity) : 0,
+      avgPrice: quantity ? Math.round((lots.reduce((a, l) => a + l.qty * l.price, 0) / quantity) * 1e4) / 1e4 : 0,
+      openLots: lots.map((l) => ({ date: l.date, quantity: +l.qty.toFixed(6), price: l.price })),
       realizedPln: round2(realized),
       dividendsGrossPln: round2(dividendsGrossPln),
       dividendsTaxPln: round2(dividendsTaxPln),
@@ -164,6 +169,7 @@ export function buildPositions(
         price: quote?.price,
         priceDate: quote?.date,
         priceCurrency: quote ? (quote.currency ?? inst.currency) : undefined,
+        pricePln: quote ? round2(quote.price * quote.fxRate) : undefined,
         valuePln,
         unrealizedPln: unrealized,
         gainPln: round2(capitalGain + position.dividendsGrossPln),

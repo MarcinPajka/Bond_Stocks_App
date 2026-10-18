@@ -49,11 +49,16 @@ describe("positions", () => {
     expect(() => buildPositions(instruments, [noFx], [], {})).toThrow(/fxRate/);
   });
 
+  it("keeps the price paid for the shares still held, after FIFO sells", () => {
+    const [cdr] = buildPositions(instruments, trades, dividends, quotes);
+    expect(cdr).toMatchObject({ avgPrice: 200, openLots: [{ date: "2025-03-01", quantity: 5, price: 200 }], pricePln: 300 });
+  });
+
   it("values a euro-listed ETF bought in złoty at its euro price times the NBP rate", () => {
     const inst = [{ symbol: "VWCE", currency: "PLN", stooq: "vwce.de" }];
     const bought: Trade[] = [{ symbol: "VWCE", account: "regular", type: "buy", date: "2025-11-18", quantity: 50, price: 654.204 }];
     const [p] = buildPositions(inst, bought, [], { VWCE: { price: 170.44, date: "2026-10-16", currency: "EUR", fxRate: 4.24 } });
-    expect(p).toMatchObject({ costPln: 32710.2, valuePln: 36133.28, unrealizedPln: 3423.08, priceCurrency: "EUR" });
+    expect(p).toMatchObject({ costPln: 32710.2, valuePln: 36133.28, unrealizedPln: 3423.08, priceCurrency: "EUR", pricePln: 722.67, avgPrice: 654.204 });
   });
 
   it("charges 19% on dividends with low foreign withholding", () => {
