@@ -278,9 +278,10 @@ function renderHoldings() {
     const id = r.id;
     const parts = Object.entries(r.breakdown).map(([k, v]) => `<div><span>${esc(k)}</span><strong class="${k.includes("tax") || k === "Belka" ? "" : cls(v)}">${pln(v)}</strong></div>`);
     if (r.ifSoldNow != null) parts.push(`<div><span>If redeemed today, after fee and Belka</span><strong class="${cls(r.ifSoldNow)}">${signed(r.ifSoldNow)}</strong></div>`);
-    const action = r.closed ? ""
+    const action = (r.closed ? ""
       : r.kind === "stock" ? `<button class="btn small primary" data-sell="${esc(id)}">Sell</button>`
-      : r.redemptionValue != null ? `<button class="btn small primary" data-sell="${esc(id)}">Redeem early</button>` : "";
+      : r.redemptionValue != null ? `<button class="btn small primary" data-sell="${esc(id)}">Redeem early</button>` : "")
+      + (r.kind === "stock" ? `<button class="btn small ghost" data-source="${esc(r.name)}">Price source</button>` : "");
     const closedBadge = r.closed ? ` <span class="badge sold">${r.kind === "bond" ? "Redeemed" : "Sold"}</span>` : "";
     return `<tr class="main${r.closed ? " closed" : ""}" data-id="${esc(id)}">
         <td><div class="name">${avatar(r)}<div><b>${esc(r.name)} <span class="badge m ${r.account === "regular" ? "" : "tax-free"}">${accountName(r.account)}</span>${closedBadge}</b><small title="${esc(r.detail)}">${esc(r.detail)}${r.price ? ` · ${priceText(r.price)}` : r.kind === "stock" ? " · no price" : ""}</small></div></div></td>
@@ -428,7 +429,7 @@ function renderEntries() {
 // ---------------------------------------------------------------- dialog
 
 const FORMS = { bonds: "bond", trades: "trade", dividends: "dividend" };
-const ALL_FORMS = ["bond", "trade", "dividend", "redeem"];
+const ALL_FORMS = ["bond", "trade", "dividend", "redeem", "instrument"];
 $$("select[name=account]").forEach((s) => (s.innerHTML = ACCOUNTS.map((a) => `<option value="${a}">${accountName(a)}</option>`).join("")));
 
 function showForm(name) {
@@ -513,6 +514,50 @@ function openSell(row) {
   $("#dialog").showModal();
 }
 
+/** Edit where an instrument's price comes from (stooq / Yahoo symbol or analizy.pl fund). */
+function openInstrument(symbol) {
+  state.editing = null;
+  state.selling = null;
+  resetDialog();
+  $("#formTabs").hidden = true;
+  const inst = (state.portfolio.instruments ?? []).find((i) => i.symbol === symbol) ?? { symbol, currency: "PLN" };
+  const f = $("#form-instrument");
+  for (const k of ["name", "currency", "analizy", "stooq", "yahoo"]) f.elements[k].value = inst[k] ?? "";
+  $("#instSymbol").textContent = symbol;
+  $("#dialogTitle").textContent = `${symbol} price source`;
+  showForm("instrument");
+  $("#dialog").showModal();
+}
+
+/** "EBAN2" or a pasted analizy.pl fund link -> "EBAN2". */
+const analizyId = (v) => {
+  const m = String(v ?? "").match(/fundusz\/([A-Za-z0-9]+)/);
+  return (m ? m[1] : String(v ?? "").trim()).toUpperCase() || undefined;
+};
+
+$("#form-instrument").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const symbol = $("#instSymbol").textContent;
+  const f = Object.fromEntries(new FormData(e.target));
+  const instruments = [...(state.portfolio.instruments ?? [])];
+  const i = instruments.findIndex((x) => x.symbol === symbol);
+  const next = clean({ symbol, name: f.name.trim(), currency: f.currency.trim().toUpperCase(),
+    analizy: analizyId(f.analizy), stooq: f.stooq.trim(), yahoo: f.yahoo.trim() });
+  if (i < 0) instruments.push(next);
+  else instruments[i] = next;
+  const btn = e.target.querySelector("button.primary");
+  btn.disabled = true;
+  $("#formError").textContent = "";
+  try {
+    await save({ ...state.portfolio, instruments }, `Saved where ${symbol}'s price comes from`);
+    $("#dialog").close();
+  } catch (err) {
+    $("#formError").textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 function updateRedeemEstimate() {
   const row = state.selling;
   if (!row || row.kind !== "bond") return;
@@ -592,7 +637,7 @@ $("#form-trade").addEventListener("submit", (e) => {
   const symbol = f.symbol.trim().toUpperCase();
   const instruments = [...(state.portfolio.instruments ?? [])];
   if (!instruments.some((i) => i.symbol === symbol)) {
-    instruments.push(clean({ symbol, name: f.name, currency: (f.currency || "PLN").toUpperCase(), stooq: f.stooq, yahoo: f.yahoo, analizy: f.analizy }));
+    instruments.push(clean({ symbol, name: f.name, currency: (f.currency || "PLN").toUpperCase(), stooq: f.stooq, yahoo: f.yahoo, analizy: analizyId(f.analizy) }));
   }
   const old = state.editing ? state.portfolio.trades[state.editing.index] : {};
   const trade = clean({ ...old, symbol, account: f.account, type: f.type, date: f.date, quantity: num(f.quantity), price: num(f.price), commission: num(f.commission) });
@@ -611,6 +656,7 @@ $("#form-dividend").addEventListener("submit", (e) => {
 $("#form-trade [name=symbol]").addEventListener("input", (e) => {
   const known = (state.portfolio.instruments ?? []).some((i) => i.symbol === e.target.value.trim().toUpperCase());
   $("#newInstrument").hidden = known;
+  $("#newInstrument").open = !known && e.target.value.trim().length > 1; // easy to miss when closed
 });
 
 // ---------------------------------------------------------------- events
@@ -634,6 +680,7 @@ document.addEventListener("click", async (e) => {
     render();
   } else if (d.themeSet) setTheme(d.themeSet);
   else if (d.sell) openSell(state.data.rows.find((r) => r.id === d.sell));
+  else if (d.source) openInstrument(d.source);
   else if (d.range) {
     state.range = d.range;
     store.set("range", d.range);

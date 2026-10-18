@@ -248,6 +248,21 @@
     <div class="estimate" id="redeemEstimate"></div>
     <button class="btn primary block">Redeem bonds</button>
   </form>
+  <form id="form-instrument" class="form" hidden>
+    <p class="sell-head">Where the app gets the price of <b id="instSymbol"></b>. Fill in one source.</p>
+    <div class="row">
+      <label>Name<input name="name"></label>
+      <label>Currency<input name="currency" maxlength="3" required></label>
+    </div>
+    <label>analizy.pl fund id or link<input name="analizy" placeholder="EBAN2 or https://www.analizy.pl/fundusz/EBAN2/…" autocomplete="off"><small>For funds such as PKO DFE: search the fund on analizy.pl and paste its page link.</small></label>
+    <div class="row">
+      <label>stooq symbol<input name="stooq" placeholder="cdr, vwce.de" autocomplete="off"></label>
+      <label>Yahoo symbol<input name="yahoo" placeholder="CDR.WA, VWCE.DE" autocomplete="off"></label>
+    </div>
+    <small class="muted">GPW shares need nothing here. Foreign ETFs need their exchange suffix, e.g. VWCE.DE.</small>
+    <button class="btn primary block">Save price source</button>
+  </form>
+
   <p class="form-error" id="formError"></p>
   <datalist id="symbols"></datalist>
 </dialog>

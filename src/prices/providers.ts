@@ -50,10 +50,17 @@ export function parseAnalizyFundPage(html: string): RawQuote | undefined {
   return { price: Number(m[1].replace(/ /g, "").replace(",", ".")), date: `${m[4]}-${m[3]}-${m[2]}`, source: "analizy.pl" };
 }
 
+/** The fund id from an analizy.pl id or a pasted fund page link (…/fundusz/EBAN2/pko-…). */
+export function analizyId(value: string): string {
+  const m = value.match(/fundusz\/([A-Za-z0-9]+)/);
+  return (m ? m[1] : value.trim()).toUpperCase();
+}
+
 export async function fetchQuote(inst: Instrument, get: Fetcher = httpFetch): Promise<RawQuote> {
   if (inst.analizy) {
-    const q = parseAnalizyFundPage(await get(`https://www.analizy.pl/fundusz/${encodeURIComponent(inst.analizy)}`));
-    if (!q) throw new Error(`No unit value found on analizy.pl for ${inst.analizy}`);
+    const id = analizyId(inst.analizy);
+    const q = parseAnalizyFundPage(await get(`https://www.analizy.pl/fundusz/${encodeURIComponent(id)}`));
+    if (!q) throw new Error(`No unit value found on analizy.pl for ${id}`);
     return q;
   }
   const stooq = inst.stooq ?? inst.symbol.toLowerCase();
@@ -73,7 +80,11 @@ export async function fetchQuote(inst: Instrument, get: Fetcher = httpFetch): Pr
   } catch (e) {
     errors.push(`yahoo: ${(e as Error).message}`);
   }
-  throw new Error(`No price for ${inst.symbol} (${errors.join("; ")})`);
+  throw new Error(
+    `No price for ${inst.symbol}: it isn't listed on stooq or Yahoo under ${stooq} / ${yahoo}. ` +
+      `If it's a fund, give it its analizy.pl id; for shares or ETFs, its stooq or Yahoo symbol. ` +
+      `Open it under Holdings and press "Price source". (${errors.join("; ")})`,
+  );
 }
 
 /** NBP mid rate (table A) from the last business day strictly before `date`, or the latest one. */

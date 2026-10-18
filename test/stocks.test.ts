@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildPositions, type Instrument, type Trade } from "../src/stocks/positions.js";
-import { fetchFxRate, fetchQuote, parseAnalizyFundPage, parseNbpRates, parseStooqQuote, parseYahooChart } from "../src/prices/providers.js";
+import { analizyId, fetchFxRate, fetchQuote, parseAnalizyFundPage, parseNbpRates, parseStooqQuote, parseYahooChart } from "../src/prices/providers.js";
 
 const instruments: Instrument[] = [
   { symbol: "CDR", currency: "PLN" },
@@ -100,5 +100,15 @@ describe("price sources", () => {
     const q = await fetchQuote({ symbol: "PKODFE", currency: "PLN", analizy: "EBAN2" }, async (u) => ((asked = u), html));
     expect(q.price).toBe(28.28);
     expect(asked).toBe("https://www.analizy.pl/fundusz/EBAN2");
+  });
+
+  it("accepts a pasted analizy.pl fund link as the id", () => {
+    expect(analizyId("https://www.analizy.pl/fundusz/EBAN2/pko-dobrowolny-fundusz-emerytalny")).toBe("EBAN2");
+    expect(analizyId(" eban2 ")).toBe("EBAN2");
+  });
+
+  it("says how to fix an instrument that no source knows", async () => {
+    const get = async () => { throw new Error("HTTP 404"); };
+    await expect(fetchQuote({ symbol: "PKODFE", currency: "PLN" }, get)).rejects.toThrow(/analizy\.pl id.*Price source/);
   });
 });
