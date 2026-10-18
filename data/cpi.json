@@ -1,6 +1,6 @@
 {
  "source": "GUS, miesięczne wskaźniki cen towarów i usług konsumpcyjnych (analogiczny miesiąc poprzedniego roku = 100), minus 100",
- "updated": "2026-10-18",
+ "updated": "2026-10-14",
  "yoyPercent": {
   "2019-01": 0.7,
   "2019-02": 1.2,
@@ -93,7 +93,6 @@
   "2026-05": 3.1,
   "2026-06": 2.5,
   "2026-07": 3.0,
-  "2026-08": 3.4,
-  "2026-09": 4.1
+  "2026-08": 3.4
  }
 }
