@@ -2,3 +2,4 @@ node_modules/
 portfolio.json
 market-data.cache.json
 portfolio-history.json
+price-history.cache.json

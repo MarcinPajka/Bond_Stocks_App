@@ -21,7 +21,7 @@ export function upcomingEvents(bonds: BondLotValuation[], asOf: IsoDate, days = 
   const until = addDays(asOf, days);
   const events: UpcomingEvent[] = [];
   for (const b of bonds) {
-    if (b.valuation.matured) continue;
+    if (b.valuation.matured || b.redeemed) continue;
     const code = b.lot.series.toUpperCase();
     const product = PRODUCTS[code.slice(0, 3)];
     const current = b.valuation.currentPeriod;
@@ -97,7 +97,12 @@ export function incomeByYear(report: Report): YearIncome[] {
       y(p.date).bondInterest += amount;
       y(p.date).bondTax += belkaTax(amount, b.lot.account);
     }
-    if (b.valuation.matured && PRODUCTS[b.lot.series.slice(0, 3).toUpperCase()].capitalised) {
+    if (b.redeemed) {
+      // Early redemption: what came back above the price paid (accrued interest less the fee).
+      const gain = round2(b.redeemed.proceeds - b.cost);
+      y(b.redeemed.date).bondInterest += gain;
+      y(b.redeemed.date).bondTax += belkaTax(gain, b.lot.account);
+    } else if (b.valuation.matured && PRODUCTS[b.lot.series.slice(0, 3).toUpperCase()].capitalised) {
       const gain = round2(b.value - b.cost);
       y(b.valuation.asOf).bondInterest += gain;
       y(b.valuation.asOf).bondTax += belkaTax(gain, b.lot.account);
@@ -201,7 +206,7 @@ export function projectBonds(
   for (const lot of lots) {
     const code = lot.series.toUpperCase();
     const product = PRODUCTS[code.slice(0, 3)];
-    if (!product) continue;
+    if (!product || lot.redeemedOn) continue;
     const maturity = addMonths(lot.purchaseDate, product.periods * product.periodMonths);
     // Extend CPI with the assumption for every month after the last known one.
     const cpi = { ...data.cpi };

@@ -25,6 +25,10 @@ const state = {
   allocMode: "assetClass",
   projection: [],
   editing: null, // { list, index }
+  selling: null, // the holdings row being sold or redeemed
+  history: null, // { total, byId, notes } from /api/history
+  range: store.get("range", "ALL"),
+  showClosed: false,
 };
 
 // ---------------------------------------------------------------- formatting
@@ -57,6 +61,7 @@ async function load(refresh = false) {
     state.portfolio = portfolio;
     $("#asof").textContent = `Valued ${dateFmt(data.asOf, { weekday: "long", day: "numeric", month: "long" })}${data.offline ? " · offline, manual prices" : ""}`;
     renderWarnings(data.warnings);
+    loadHistory(refresh);
     if (state.page === "bonds") await loadProjection();
   } catch (e) {
     $("#asof").textContent = "";
@@ -67,9 +72,20 @@ async function load(refresh = false) {
   render();
 }
 
+async function loadHistory(refresh = false) {
+  try {
+    state.history = await api(`/api/history${refresh ? "?refresh" : ""}`);
+    if (state.history.warnings?.length) renderWarnings([...state.data.warnings, ...state.history.warnings]);
+  } catch (e) {
+    state.history = { total: [], byId: {}, notes: [`Couldn't build the history: ${e.message}`] };
+  }
+  if (state.page === "overview" || state.page === "holdings") render();
+}
+
 async function save(next, message) {
   await api("/api/portfolio", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) });
   toast(message);
+  state.history = null;
   await load();
 }
 
@@ -113,9 +129,35 @@ function render() {
 // ---------------------------------------------------------------- overview
 
 function totals(rows) {
-  const sum = (f) => rows.reduce((a, r) => a + (f(r) ?? 0), 0);
-  const cost = sum((r) => r.cost), value = sum((r) => r.value), gain = sum(gainOf);
-  return { cost, value, gain, ret: cost ? (gain / cost) * 100 : null };
+  const sum = (f, list = rows) => list.reduce((a, r) => a + (f(r) ?? 0), 0);
+  const open = rows.filter((r) => !r.closed);
+  const cost = sum((r) => r.cost, open), value = sum((r) => r.value), gain = sum(gainOf);
+  const everInvested = sum((r) => r.cost); // includes redeemed bonds, so their gain counts against what they cost
+  return { cost, value, gain, ret: everInvested ? (gain / everInvested) * 100 : null };
+}
+
+// ---------------------------------------------------------------- value over time
+
+const RANGES = { "1M": 1, "3M": 3, "1Y": 12 };
+function inRange(points, asOf) {
+  if (state.range === "ALL") return points;
+  const from = new Date(asOf);
+  if (state.range === "YTD") from.setMonth(0, 1);
+  else from.setMonth(from.getMonth() - RANGES[state.range]);
+  const cut = from.toISOString().slice(0, 10);
+  return points.filter((p) => p.date >= cut);
+}
+
+function valueChart(target, points, { short = false } = {}) {
+  if (!state.history) return (target.innerHTML = `<div class="empty-msg">Loading history…</div>`);
+  if (points.length < 2) return (target.innerHTML = `<div class="empty-msg">Not enough history in this period yet.</div>`);
+  const span = (new Date(points.at(-1).date) - new Date(points[0].date)) / 864e5;
+  const label = span > 300 ? { month: "short", year: "numeric" } : { day: "numeric", month: "short" };
+  Charts.line(target, [
+    { key: "Value", points: points.map((h) => ({ x: h.date, y: h.value })) },
+    { key: "Invested", points: points.map((h) => ({ x: h.date, y: h.cost })), className: "cost" },
+  ], { format: (v) => pln(v), xLabel: (d) => dateFmt(d, label), tipTitle: (d) => dateFmt(d) });
+  target.insertAdjacentHTML("beforeend", `<div class="legend-inline"><span><i></i>Value</span><span><i class="dash"></i>Invested${short ? "" : " (cost of what you hold)"}</span></div>`);
 }
 
 function emptyState(target) {
@@ -134,21 +176,14 @@ function renderOverview() {
   $("#hCost").textContent = pln(t.cost);
   $("#hReturn").textContent = pct(t.ret);
   $("#hReturn").className = cls(t.gain);
-  $("#hCount").textContent = rows.length;
+  $("#hCount").textContent = rows.filter((r) => !r.closed).length;
 
   // value over time
-  const hist = state.data.history;
   const hc = $("#historyChart");
+  $$("#rangePick button").forEach((b) => b.classList.toggle("on", b.dataset.range === state.range));
   if (!rows.length) emptyState(hc);
-  else if (hist.length < 2) {
-    hc.innerHTML = `<div class="empty-msg">The chart starts filling in from tomorrow: the app saves one snapshot of your portfolio each day you open it.</div>`;
-  } else {
-    Charts.line(hc, [
-      { key: "Value", points: hist.map((h) => ({ x: h.date, y: h.value })) },
-      { key: "Invested", points: hist.map((h) => ({ x: h.date, y: h.cost })), className: "cost" },
-    ], { format: (v) => pln(v), xLabel: (d) => dateFmt(d, { day: "numeric", month: "short" }), tipTitle: (d) => dateFmt(d) });
-    hc.insertAdjacentHTML("beforeend", `<div class="legend-inline"><span><i></i>Value</span><span><i class="dash"></i>Invested</span></div>`);
-  }
+  else valueChart(hc, inRange(state.history?.total ?? [], state.data.asOf));
+  $("#historyNotes").textContent = state.history?.notes?.length ? `Price history: ${state.history.notes.join("; ")}.` : "";
 
   // allocation
   const key = state.allocMode;
@@ -175,7 +210,7 @@ function renderOverview() {
     : `<li class="empty-list">No bond payouts, rate changes or maturities in the next four months.</li>`;
 
   // movers
-  const ranked = rows.filter((r) => gainOf(r) != null && r.cost).map((r) => ({ r, ret: (gainOf(r) / r.cost) * 100 })).sort((a, b) => b.ret - a.ret);
+  const ranked = rows.filter((r) => !r.closed && gainOf(r) != null && r.cost).map((r) => ({ r, ret: (gainOf(r) / r.cost) * 100 })).sort((a, b) => b.ret - a.ret);
   const pick = ranked.length > 4 ? [...ranked.slice(0, 3), ranked.at(-1)] : ranked;
   $("#movers").innerHTML = pick.length
     ? pick.map(({ r, ret }) => `<li><div class="name" style="display:flex;gap:12px;align-items:center">${avatar(r)}
@@ -200,6 +235,7 @@ function filteredRows() {
   const q = state.search.trim().toLowerCase();
   return state.data.rows.filter(
     (r) =>
+      (state.showClosed || !r.closed) &&
       (state.account === "all" || r.account === state.account) &&
       (state.assetClass === "all" || r.assetClass === state.assetClass) &&
       (!q || `${r.name} ${r.detail}`.toLowerCase().includes(q)),
@@ -214,6 +250,10 @@ function renderHoldings() {
   $("#classChips").innerHTML = ["all", ...CLASSES.filter((c) => rows.some((r) => r.assetClass === c))]
     .map((c) => chip("class", c, c === "all" ? "All types" : c, state.assetClass === c)).join("");
   $("#gainHead").textContent = state.net ? "Gain after Belka" : "Gain";
+  const closedCount = rows.filter((r) => r.closed).length;
+  $("#closedChip").hidden = !closedCount;
+  $("#closedChip").classList.toggle("on", state.showClosed);
+  $("#closedChip").textContent = `Show sold (${closedCount})`;
 
   const { key, asc } = state.sort;
   const val = (r) => ({ name: r.name, account: r.account, quantity: r.quantity, cost: r.cost, value: r.value ?? -Infinity,
@@ -235,11 +275,15 @@ function renderHoldings() {
 
   $("#holdingsTable tbody").innerHTML = list.map((r) => {
     const g = gainOf(r);
-    const id = `${r.kind}|${r.name}|${r.account}|${r.detail}`;
+    const id = r.id;
     const parts = Object.entries(r.breakdown).map(([k, v]) => `<div><span>${esc(k)}</span><strong class="${k.includes("tax") || k === "Belka" ? "" : cls(v)}">${pln(v)}</strong></div>`);
     if (r.ifSoldNow != null) parts.push(`<div><span>If redeemed today, after fee and Belka</span><strong class="${cls(r.ifSoldNow)}">${signed(r.ifSoldNow)}</strong></div>`);
-    return `<tr class="main" data-id="${esc(id)}">
-        <td><div class="name">${avatar(r)}<div><b>${esc(r.name)} <span class="badge m ${r.account === "regular" ? "" : "tax-free"}">${accountName(r.account)}</span></b><small title="${esc(r.detail)}">${esc(r.detail)}${r.price ? ` · ${priceText(r.price)}` : r.kind === "stock" ? " · no price" : ""}</small></div></div></td>
+    const action = r.closed ? ""
+      : r.kind === "stock" ? `<button class="btn small primary" data-sell="${esc(id)}">Sell</button>`
+      : r.redemptionValue != null ? `<button class="btn small primary" data-sell="${esc(id)}">Redeem early</button>` : "";
+    const closedBadge = r.closed ? ` <span class="badge sold">${r.kind === "bond" ? "Redeemed" : "Sold"}</span>` : "";
+    return `<tr class="main${r.closed ? " closed" : ""}" data-id="${esc(id)}">
+        <td><div class="name">${avatar(r)}<div><b>${esc(r.name)} <span class="badge m ${r.account === "regular" ? "" : "tax-free"}">${accountName(r.account)}</span>${closedBadge}</b><small title="${esc(r.detail)}">${esc(r.detail)}${r.price ? ` · ${priceText(r.price)}` : r.kind === "stock" ? " · no price" : ""}</small></div></div></td>
         <td><span class="badge ${r.account === "regular" ? "" : "tax-free"}">${accountName(r.account)}</span></td>
         <td class="num">${r.quantity.toLocaleString("pl-PL")}</td>
         <td class="num">${pln(r.cost)}</td>
@@ -247,8 +291,16 @@ function renderHoldings() {
         <td class="num ${cls(g)}">${signed(g)}</td>
         <td class="num ${cls(g)}">${pct(g != null && r.cost ? (g / r.cost) * 100 : null)}</td>
       </tr>
-      <tr class="details" ${state.open.has(id) ? "" : "hidden"}><td colspan="7"><div class="breakdown">${parts.join("")}</div></td></tr>`;
+      <tr class="details" ${state.open.has(id) ? "" : "hidden"}><td colspan="7"><div class="detail-grid">
+        <div class="chart mini" data-h="150" data-row="${esc(id)}"></div>
+        <div class="detail-side"><div class="breakdown">${parts.join("")}</div>${action ? `<div class="detail-actions">${action}</div>` : ""}</div>
+      </div></td></tr>`;
   }).join("");
+  $$("#holdingsTable .chart.mini").forEach((c) => { if (!c.closest("tr").hidden) drawRowChart(c); });
+}
+
+function drawRowChart(container) {
+  valueChart(container, state.history?.byId?.[container.dataset.row] ?? [], { short: true });
 }
 
 // ---------------------------------------------------------------- income & tax
@@ -350,7 +402,7 @@ function entryList() {
   const p = state.portfolio;
   const out = [];
   (p.bonds ?? []).forEach((b, i) => out.push({ list: "bonds", i, date: b.purchaseDate, icon: "🏛",
-    main: `${b.series} × ${b.quantity}`, sub: `Bond bought ${dateFmt(b.purchaseDate)} · ${accountName(b.account)}` }));
+    main: `${b.series} × ${b.quantity}`, sub: `Bond bought ${dateFmt(b.purchaseDate)}${b.redeemedOn ? `, redeemed ${dateFmt(b.redeemedOn)}` : ""} · ${accountName(b.account)}` }));
   (p.trades ?? []).forEach((t, i) => out.push({ list: "trades", i, date: t.date, icon: t.type === "buy" ? "↗" : "↘",
     main: `${t.type === "buy" ? "Bought" : "Sold"} ${t.quantity} ${t.symbol} at ${t.price}`, sub: `${dateFmt(t.date)} · ${accountName(t.account)}${t.commission ? ` · commission ${t.commission}` : ""}` }));
   (p.dividends ?? []).forEach((d, i) => out.push({ list: "dividends", i, date: d.date, icon: "💰",
@@ -376,11 +428,12 @@ function renderEntries() {
 // ---------------------------------------------------------------- dialog
 
 const FORMS = { bonds: "bond", trades: "trade", dividends: "dividend" };
+const ALL_FORMS = ["bond", "trade", "dividend", "redeem"];
 $$("select[name=account]").forEach((s) => (s.innerHTML = ACCOUNTS.map((a) => `<option value="${a}">${accountName(a)}</option>`).join("")));
 
 function showForm(name) {
   $$("#formTabs button").forEach((b) => b.classList.toggle("on", b.dataset.form === name));
-  ["bond", "trade", "dividend"].forEach((f) => ($(`#form-${f}`).hidden = f !== name));
+  ALL_FORMS.forEach((f) => ($(`#form-${f}`).hidden = f !== name));
   $("#formError").textContent = "";
 }
 
@@ -389,13 +442,26 @@ function setTradeType(type) {
   $$("#tradeType button").forEach((b) => b.classList.toggle("on", b.dataset.type === type));
 }
 
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
+function resetDialog() {
+  ALL_FORMS.forEach((f) => $(`#form-${f}`).reset());
+  setTradeType("buy");
+  $$("#dialog input[type=date][required]").forEach((i) => (i.value = todayStr()));
+  $("#sellHead").hidden = true;
+  $("#redeemedField").hidden = true;
+  $("#tradeType").hidden = false;
+  $("#newInstrument").hidden = false;
+  $("#form-trade [name=quantity]").removeAttribute("max");
+  $("#form-trade button.primary").textContent = "Save trade";
+}
+
 function openDialog(edit) {
   state.editing = edit ?? null;
-  ["bond", "trade", "dividend"].forEach((f) => $(`#form-${f}`).reset());
-  setTradeType("buy");
+  state.selling = null;
+  resetDialog();
   $("#formTabs").hidden = !!edit;
-  const todayStr = new Date().toISOString().slice(0, 10);
-  $$("#dialog input[type=date]").forEach((i) => (i.value = todayStr));
+  $("#redeemedField").hidden = !edit;
   if (edit) {
     const entry = state.portfolio[edit.list][edit.index];
     const form = $(`#form-${FORMS[edit.list]}`);
@@ -413,6 +479,82 @@ function openDialog(edit) {
   $("#dialog").showModal();
 }
 
+/** Sell shares/funds (a sell trade) or redeem bonds early, starting from a holdings row. */
+function openSell(row) {
+  state.editing = null;
+  state.selling = row;
+  resetDialog();
+  $("#formTabs").hidden = true;
+  if (row.kind === "bond") {
+    const lot = state.portfolio.bonds[Number(row.id.split(":")[1])];
+    $("#dialogTitle").textContent = `Redeem ${row.name} early`;
+    $("#redeemHead").textContent = `You hold ${lot.quantity} bonds in ${accountName(lot.account)}, bought ${dateFmt(lot.purchaseDate)}.`;
+    const q = $("#form-redeem [name=quantity]");
+    q.max = lot.quantity;
+    q.value = lot.quantity;
+    showForm("redeem");
+    updateRedeemEstimate();
+  } else {
+    $("#dialogTitle").textContent = `Sell ${row.name}`;
+    const f = $("#form-trade");
+    setTradeType("sell");
+    $("#tradeType").hidden = true;
+    $("#newInstrument").hidden = true;
+    f.elements.symbol.value = row.name;
+    f.elements.account.value = row.account;
+    f.elements.quantity.value = row.quantity;
+    f.elements.quantity.max = row.quantity;
+    if (row.price) f.elements.price.value = row.price.value;
+    f.querySelector("button.primary").textContent = `Sell ${row.name}`;
+    $("#sellHead").textContent = `You hold ${row.quantity.toLocaleString("pl-PL")} in ${accountName(row.account)}. The price is filled in from the latest quote; change it to what you actually got.`;
+    $("#sellHead").hidden = false;
+    showForm("trade");
+  }
+  $("#dialog").showModal();
+}
+
+function updateRedeemEstimate() {
+  const row = state.selling;
+  if (!row || row.kind !== "bond") return;
+  const q = Number($("#form-redeem [name=quantity]").value) || 0;
+  const share = q / row.quantity;
+  const back = row.redemptionValue * share;
+  const net = row.ifSoldNow * share;
+  const date = $("#form-redeem [name=date]").value;
+  $("#redeemEstimate").innerHTML = q > 0
+    ? `Redeemed today, ${q} bond${q === 1 ? "" : "s"} would pay back about <b>${pln(back)}</b>${row.account === "regular" ? ` after the early-redemption fee, a net gain of <b>${signed(net)}</b> after Belka` : ` (no fee or Belka in ${accountName(row.account)})`}.${date && date !== todayStr() ? " The exact amount is worked out for the date you pick." : ""}`
+    : "";
+}
+["input", "change"].forEach((ev) => $("#form-redeem").addEventListener(ev, updateRedeemEstimate));
+
+$("#form-redeem").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const row = state.selling;
+  const f = Object.fromEntries(new FormData(e.target));
+  const index = Number(row.id.split(":")[1]);
+  const lot = state.portfolio.bonds[index];
+  const q = Number(f.quantity);
+  if (!(q >= 1 && q <= lot.quantity)) return ($("#formError").textContent = `Enter between 1 and ${lot.quantity} bonds.`);
+  const bonds = [...state.portfolio.bonds];
+  if (q === lot.quantity) bonds[index] = { ...lot, redeemedOn: f.date };
+  else {
+    // Part of a lot: keep the rest as it was and record the redeemed bonds as their own entry.
+    bonds[index] = { ...lot, quantity: lot.quantity - q };
+    bonds.push({ ...lot, quantity: q, redeemedOn: f.date });
+  }
+  const btn = e.target.querySelector("button.primary");
+  btn.disabled = true;
+  $("#formError").textContent = "";
+  try {
+    await save({ ...state.portfolio, bonds }, `Redeemed ${q} × ${lot.series}`);
+    $("#dialog").close();
+  } catch (err) {
+    $("#formError").textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 const num = (v) => (v === "" || v == null ? undefined : Number(v));
 const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== "" && !(typeof v === "number" && isNaN(v))));
 
@@ -427,7 +569,7 @@ async function submitEntry(list, entry, extra = {}, label) {
   $("#formError").textContent = "";
   try {
     await save(next, state.editing ? "Changes saved" : label);
-    store.set("lastForm", FORMS[list]);
+    if (!state.selling) store.set("lastForm", FORMS[list]);
     $("#dialog").close();
   } catch (e) {
     $("#formError").textContent = e.message;
@@ -440,7 +582,7 @@ $("#form-bond").addEventListener("submit", (e) => {
   e.preventDefault();
   const f = Object.fromEntries(new FormData(e.target));
   const terms = f.firstYearRate ? { firstYearRate: num(f.firstYearRate), margin: num(f.margin) ?? 0, earlyFee: num(f.earlyFee) ?? 0 } : undefined;
-  const bond = clean({ series: f.series.toUpperCase(), purchaseDate: f.purchaseDate, quantity: num(f.quantity), pricePerBond: num(f.pricePerBond), account: f.account, terms });
+  const bond = clean({ series: f.series.toUpperCase(), purchaseDate: f.purchaseDate, quantity: num(f.quantity), pricePerBond: num(f.pricePerBond), account: f.account, terms, redeemedOn: f.redeemedOn });
   submitEntry("bonds", bond, {}, `Added ${bond.quantity} × ${bond.series}`);
 });
 
@@ -491,6 +633,15 @@ document.addEventListener("click", async (e) => {
     $$("#allocMode button").forEach((b) => b.classList.toggle("on", b === t));
     render();
   } else if (d.themeSet) setTheme(d.themeSet);
+  else if (d.sell) openSell(state.data.rows.find((r) => r.id === d.sell));
+  else if (d.range) {
+    state.range = d.range;
+    store.set("range", d.range);
+    render();
+  } else if (t.id === "closedChip") {
+    state.showClosed = !state.showClosed;
+    render();
+  }
   else if (d.edit) {
     const [list, index] = d.edit.split(":");
     openDialog({ list, index: Number(index) });
@@ -503,6 +654,8 @@ document.addEventListener("click", async (e) => {
     const id = t.dataset.id;
     state.open.has(id) ? state.open.delete(id) : state.open.add(id);
     t.nextElementSibling.hidden = !state.open.has(id);
+    const chart = t.nextElementSibling.querySelector(".chart.mini");
+    if (!t.nextElementSibling.hidden && chart) drawRowChart(chart);
   }
 });
 

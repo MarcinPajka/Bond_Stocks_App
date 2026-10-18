@@ -63,8 +63,11 @@
 
       <div class="grid-2">
         <div class="card">
-          <div class="card-head"><h2>Value over time</h2><span class="muted small">one point per day you open the app</span></div>
+          <div class="card-head"><h2>Value over time</h2>
+            <div class="seg" id="rangePick"><button data-range="1M">1M</button><button data-range="3M">3M</button><button data-range="YTD">YTD</button><button data-range="1Y">1Y</button><button data-range="ALL">All</button></div>
+          </div>
           <div id="historyChart" class="chart"></div>
+          <p class="note" id="historyNotes"></p>
         </div>
         <div class="card">
           <div class="card-head">
@@ -92,6 +95,7 @@
       <div class="filters">
         <div class="chips" id="accountChips"></div>
         <div class="chips" id="classChips"></div>
+        <div class="chips"><button id="closedChip" title="Show holdings you have sold or redeemed">Show sold</button></div>
         <input type="search" id="search" placeholder="Search holdings…">
       </div>
       <div class="card flush">
@@ -172,6 +176,7 @@
     <button data-form="trade">Buy / sell</button>
     <button data-form="dividend">Dividend</button>
   </div>
+  <p class="sell-head" id="sellHead" hidden></p>
 
   <form id="form-bond" class="form">
     <label>Series<input name="series" placeholder="e.g. EDO1035" required pattern="[A-Za-z]{3}\d{4}" autocomplete="off"><small>Code from your PKO statement. Rate, margin and fee are fetched automatically.</small></label>
@@ -183,6 +188,7 @@
       <label>Price per bond (zł)<input name="pricePerBond" type="number" step="0.01" value="100"><small>99.90 if bought by exchange</small></label>
       <label>Account<select name="account"></select></label>
     </div>
+    <label id="redeemedField" hidden>Redeemed early on<input name="redeemedOn" type="date"><small>Clear it if you still hold these bonds</small></label>
     <details><summary>Override series terms</summary>
       <div class="row three">
         <label>First-year rate %<input name="firstYearRate" type="number" step="0.01"></label>
@@ -232,6 +238,15 @@
     </div>
     <label>Account<select name="account"></select></label>
     <button class="btn primary block">Save dividend</button>
+  </form>
+  <form id="form-redeem" class="form" hidden>
+    <p class="sell-head" id="redeemHead"></p>
+    <div class="row">
+      <label>Number of bonds<input name="quantity" type="number" min="1" step="1" required></label>
+      <label>Redemption date<input name="date" type="date" required></label>
+    </div>
+    <div class="estimate" id="redeemEstimate"></div>
+    <button class="btn primary block">Redeem bonds</button>
   </form>
   <p class="form-error" id="formError"></p>
   <datalist id="symbols"></datalist>

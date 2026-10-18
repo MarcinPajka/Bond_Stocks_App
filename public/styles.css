@@ -320,3 +320,21 @@ dialog::backdrop { background: rgba(10, 12, 16, .45); backdrop-filter: blur(2px)
   .bottom-nav a svg { width: 22px; height: 22px; }
   .bottom-nav a.on { color: var(--accent); }
 }
+
+/* holding detail: chart, breakdown and actions */
+.detail-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 20px 28px; align-items: start; }
+.detail-side { display: flex; flex-direction: column; gap: 16px; }
+.detail-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.chart.mini { min-height: 150px; }
+.chart.mini .empty-msg { font-size: 12.5px; }
+tr.closed td { color: var(--muted); }
+tr.closed .avatar { opacity: .55; }
+.badge.sold { background: var(--surface-2); color: var(--muted); border: 1px dashed var(--border); }
+.sell-head { margin: 0 0 14px; color: var(--text-2); font-size: 13.5px; }
+.estimate { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text-2); margin: 4px 0 14px; }
+.estimate:empty { display: none; }
+.estimate b { color: var(--text); font-variant-numeric: tabular-nums; }
+#rangePick button { padding: 5px 9px; }
+@media (max-width: 760px) {
+  .detail-grid { grid-template-columns: 1fr; }
+}

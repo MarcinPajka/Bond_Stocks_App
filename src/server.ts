@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { buildReport, cachePathFor, type PortfolioFile, type Report } from "./portfolio.js";
 import { contributions, incomeByYear, projectBonds, upcomingEvents } from "./insights.js";
 import { toRows } from "./view.js";
+import { loadPriceHistory, recordQuotes, refreshPriceHistory, valueHistory } from "./history.js";
 import { today } from "./bonds/dates.js";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -14,10 +15,7 @@ const OFFLINE = process.env.OFFLINE === "1";
 const PORT = Number(process.env.PORT ?? 5173);
 const CACHE_MS = 5 * 60_000;
 const MARKET_CACHE = cachePathFor(PORTFOLIO);
-const HISTORY = join(dirname(PORTFOLIO), "portfolio-history.json");
-
-type History = Record<string, { value: number; cost: number; gain: number }>;
-const readHistory = (): History => (existsSync(HISTORY) ? JSON.parse(readFileSync(HISTORY, "utf8")) : {});
+const PRICE_HISTORY = join(dirname(PORTFOLIO), "price-history.cache.json");
 
 const readPortfolio = (): PortfolioFile => (existsSync(PORTFOLIO) ? JSON.parse(readFileSync(PORTFOLIO, "utf8")) : {});
 
@@ -28,16 +26,9 @@ async function report(date: string | undefined, refresh: boolean) {
   const key = JSON.stringify([portfolio, date]);
   if (!refresh && cache && cache.key === key && Date.now() - cache.at < CACHE_MS) return cache;
   const r = await buildReport(portfolio, { offline: OFFLINE, asOf: date, cachePath: MARKET_CACHE });
-  const rows = toRows(r, portfolio.instruments ?? []);
+  const rows = toRows(r, portfolio.instruments ?? [], portfolio.bonds ?? []);
   const sum = (f: (x: (typeof rows)[number]) => number | null) => Math.round(rows.reduce((a, x) => a + (f(x) ?? 0), 0) * 100) / 100;
   const summary = { value: sum((x) => x.value), cost: sum((x) => x.cost), gain: sum((x) => x.income), netGain: sum((x) => x.netIncome) };
-
-  // One snapshot per day of the live valuation, for the value-over-time chart.
-  const history = readHistory();
-  if (!date && rows.length && !r.warnings.some((w) => /no price|No price/.test(w))) {
-    history[r.asOf] = { value: summary.value, cost: summary.cost, gain: summary.gain };
-    writeFileSync(HISTORY, JSON.stringify(history, null, 2));
-  }
 
   const year = Number(r.asOf.slice(0, 4));
   const body = {
@@ -49,7 +40,6 @@ async function report(date: string | undefined, refresh: boolean) {
     events: upcomingEvents(r.bonds, r.asOf),
     income: incomeByYear(r),
     contributions: contributions(r, year, portfolio.settings?.ikzeSelfEmployed),
-    history: Object.entries(history).sort(([a], [b]) => a.localeCompare(b)).map(([d, v]) => ({ date: d, ...v })),
     defaults: {
       inflation: r.bondData.cpi[Object.keys(r.bondData.cpi).sort().at(-1) ?? ""] ?? 3,
       nbpRate: r.bondData.nbpReference[Object.keys(r.bondData.nbpReference).sort().at(-1) ?? ""] ?? 4,
@@ -57,6 +47,25 @@ async function report(date: string | undefined, refresh: boolean) {
   };
   cache = { key, at: Date.now(), report: r, body };
   return cache;
+}
+
+let historyCache: { key: string; at: number; body: unknown } | undefined;
+
+/** Value over time for the whole portfolio and each holding. Fetches price history as needed. */
+async function history(refresh: boolean) {
+  const { report: r } = await report(undefined, false);
+  const portfolio = readPortfolio();
+  const key = JSON.stringify([portfolio, r.asOf]);
+  if (!refresh && historyCache && historyCache.key === key && Date.now() - historyCache.at < CACHE_MS) return historyCache.body;
+  let warnings: string[] = [];
+  let prices = loadPriceHistory(PRICE_HISTORY);
+  if (!OFFLINE) {
+    ({ cache: prices, warnings } = await refreshPriceHistory(PRICE_HISTORY, portfolio, r.asOf));
+    recordQuotes(PRICE_HISTORY, prices, r, portfolio.instruments ?? []);
+  }
+  const body = { ...valueHistory(portfolio, r.trades, r.bondData, prices, r.asOf), warnings };
+  historyCache = { key, at: Date.now(), body };
+  return body;
 }
 
 function send(res: ServerResponse, status: number, body: unknown, type = "application/json") {
@@ -77,6 +86,9 @@ createServer(async (req, res) => {
   try {
     if (url.pathname === "/api/report" && req.method === "GET") {
       return send(res, 200, (await report(url.searchParams.get("date") ?? undefined, url.searchParams.has("refresh"))).body);
+    }
+    if (url.pathname === "/api/history" && req.method === "GET") {
+      return send(res, 200, await history(url.searchParams.has("refresh")));
     }
     if (url.pathname === "/api/projection" && req.method === "GET") {
       const { report: r } = await report(undefined, false);

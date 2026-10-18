@@ -14,6 +14,10 @@ Private tracker for Polish treasury bonds, stocks/ETFs and PKO DFE, with gains s
   - Bond outlook: each bond held to maturity under an inflation and NBP-rate assumption you set with sliders.
   - Entries: edit or delete any logged item, export and import the portfolio as JSON.
 
+- Step 6 (done): selling and history:
+  - Open any holding and press **Sell** (shares, ETFs, funds) or **Redeem early** (bonds). Part of a bond lot can be redeemed; it becomes its own entry. Sold and redeemed holdings are hidden from the list until you press "Show sold".
+  - Value over time is rebuilt from your entries, for the whole portfolio (Overview, with 1M/3M/YTD/1Y/All) and for each holding (open its row). Bonds are valued day by day with the bond calculator; shares and ETFs use daily closes from Yahoo Finance and NBP exchange rates, kept in `price-history.cache.json`. Funds priced from analizy.pl have no history source, so their line uses your trade prices and the unit values the app has fetched since.
+
 IKE/IKZE contributions are approximated from purchases made in those accounts, so reinvested sale proceeds count twice. Tick "self-employed" on the Overview page for the higher IKZE limit.
 
 ## Run the app
