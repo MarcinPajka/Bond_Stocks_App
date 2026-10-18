@@ -41,6 +41,8 @@ The Entries page shows the exact path. Older versions kept `portfolio.json` next
 
 Use "Load sample data" to try it with made-up holdings. The server listens on localhost only. `OFFLINE=1 npm start` skips live prices and uses the manual `prices` in the file.
 
+Foreign shares and ETFs can be entered in the currency you actually paid: if your broker charged you in złoty for VWCE, set the instrument's currency to PLN and enter złoty prices. The live price is read in the listing's own currency (EUR for VWCE.DE, as Yahoo reports it) and converted at today's NBP rate, so the gain is the real one in złoty.
+
 Each share or fund needs a price source: GPW shares need nothing; foreign ETFs need their stooq or Yahoo symbol; funds need their analizy.pl id (open the holding and press "Price source"). Instruments the app already knows from its sample list, such as PKODFE, get theirs filled in automatically.
 
 ## Command-line report

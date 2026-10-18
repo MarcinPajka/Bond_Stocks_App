@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { addDays, daysBetween, type IsoDate } from "./bonds/dates.js";
 import { valueLot, type BondData } from "./bonds/lot.js";
 import type { PortfolioFile, Report } from "./portfolio.js";
-import { httpFetch, type Fetcher } from "./prices/providers.js";
+import { httpFetch, yahooCurrency, yahooSymbol, type Fetcher } from "./prices/providers.js";
 import type { Instrument, Trade } from "./stocks/positions.js";
 
 /**
@@ -15,7 +15,8 @@ import type { Instrument, Trade } from "./stocks/positions.js";
 export type Series = Record<IsoDate, number>;
 
 export interface PriceHistoryCache {
-  prices: Record<string, Series>; // symbol -> day -> close, instrument currency
+  prices: Record<string, Series>; // symbol -> day -> close, in currencies[symbol]
+  currencies?: Record<string, string>; // symbol -> currency of its prices, when the source said
   fx: Record<string, Series>; // currency -> day -> NBP mid rate
   checkedAt: Record<string, number>; // "price:SYMBOL" or "fx:EUR" -> when last fetched
 }
@@ -54,12 +55,15 @@ export function parseNbpRateSeries(json: string): Series {
   return out;
 }
 
-export async function fetchPriceHistory(inst: Instrument, from: IsoDate, to: IsoDate, get: Fetcher = httpFetch): Promise<Series> {
-  const yahoo = inst.yahoo ?? `${inst.symbol.toUpperCase()}.WA`;
+export async function fetchPriceHistory(
+  inst: Instrument, from: IsoDate, to: IsoDate, get: Fetcher = httpFetch,
+): Promise<{ series: Series; currency?: string }> {
+  const yahoo = yahooSymbol(inst);
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahoo)}?period1=${unix(from)}&period2=${unix(addDays(to, 1))}&interval=1d`;
-  const series = parseYahooHistory(await get(url));
+  const json = await get(url);
+  const series = parseYahooHistory(json);
   if (!Object.keys(series).length) throw new Error(`no price history for ${yahoo}`);
-  return series;
+  return { series, currency: yahooCurrency(JSON.parse(json)?.chart?.result?.[0]?.meta?.currency) };
 }
 
 /** NBP allows at most 93 days per request, so longer spans are fetched in pieces. */
@@ -79,19 +83,20 @@ export async function fetchFxHistory(currency: string, from: IsoDate, to: IsoDat
 // ---------------------------------------------------------------- cache
 
 export function loadPriceHistory(path: string): PriceHistoryCache {
-  const empty = { prices: {}, fx: {}, checkedAt: {} };
+  const empty = { prices: {}, currencies: {}, fx: {}, checkedAt: {} };
   return existsSync(path) ? { ...empty, ...JSON.parse(readFileSync(path, "utf8")) } : empty;
 }
 
-/** Earliest trade date per symbol, and per currency for foreign instruments. */
-function firstDates(p: PortfolioFile) {
+/** Earliest trade date per symbol, and per foreign currency its trades or prices are in. */
+function firstDates(p: PortfolioFile, priceCurrencies: Record<string, string> = {}) {
   const symbols: Record<string, IsoDate> = {};
   const currencies: Record<string, IsoDate> = {};
   const cur = new Map((p.instruments ?? []).map((i) => [i.symbol, i.currency]));
   for (const t of p.trades ?? []) {
     if (!symbols[t.symbol] || t.date < symbols[t.symbol]) symbols[t.symbol] = t.date;
-    const c = cur.get(t.symbol);
-    if (c && c !== "PLN" && (!currencies[c] || t.date < currencies[c])) currencies[c] = t.date;
+    for (const c of [cur.get(t.symbol), priceCurrencies[t.symbol]]) {
+      if (c && c !== "PLN" && (!currencies[c] || t.date < currencies[c])) currencies[c] = t.date;
+    }
   }
   return { symbols, currencies };
 }
@@ -106,22 +111,29 @@ export async function refreshPriceHistory(
 ): Promise<{ cache: PriceHistoryCache; warnings: string[] }> {
   const cache = loadPriceHistory(cachePath);
   const warnings: string[] = [];
-  const { symbols, currencies } = firstDates(p);
+  const { symbols } = firstDates(p);
   const stale = (key: string) => now - (cache.checkedAt[key] ?? 0) > REFRESH_EVERY_MS;
   let changed = false;
+  cache.currencies ??= {};
 
   for (const inst of p.instruments ?? []) {
     const from = symbols[inst.symbol];
     if (!from || inst.analizy || !stale(`price:${inst.symbol}`)) continue;
     try {
-      cache.prices[inst.symbol] = { ...cache.prices[inst.symbol], ...(await fetchPriceHistory(inst, addDays(from, -7), asOf, get)) };
+      const { series, currency } = await fetchPriceHistory(inst, addDays(from, -7), asOf, get);
+      // Prices in another currency than before (a fixed symbol) replace the old ones.
+      const same = !currency || cache.currencies[inst.symbol] === currency;
+      cache.prices[inst.symbol] = { ...(same ? cache.prices[inst.symbol] : {}), ...series };
+      if (currency) cache.currencies[inst.symbol] = currency;
       cache.checkedAt[`price:${inst.symbol}`] = now;
       changed = true;
     } catch (e) {
       warnings.push(`${inst.symbol}: price history not updated (${(e as Error).message})`);
     }
   }
+  const { currencies } = firstDates(p, cache.currencies);
   for (const [currency, from] of Object.entries(currencies)) {
+    if (from < (Object.keys(cache.fx[currency] ?? {}).sort()[0] ?? "9999")) cache.checkedAt[`fx:${currency}`] = 0; // needs earlier days
     if (!stale(`fx:${currency}`)) continue;
     try {
       cache.fx[currency] = { ...cache.fx[currency], ...(await fetchFxHistory(currency, addDays(from, -7), asOf, get)) };
@@ -138,8 +150,14 @@ export async function refreshPriceHistory(
 /** Keeps the prices the report just fetched, so funds without a history source build one up. */
 export function recordQuotes(cachePath: string, cache: PriceHistoryCache, report: Report, instruments: Instrument[]) {
   let changed = false;
+  cache.currencies ??= {};
   for (const pos of report.positions) {
     if (pos.price === undefined || !pos.priceDate) continue;
+    if (pos.priceCurrency && cache.currencies[pos.symbol] !== pos.priceCurrency) {
+      if (cache.currencies[pos.symbol]) cache.prices[pos.symbol] = {}; // was recorded in another currency
+      cache.currencies[pos.symbol] = pos.priceCurrency;
+      changed = true;
+    }
     const series = (cache.prices[pos.symbol] ??= {});
     if (series[pos.priceDate] !== pos.price) {
       series[pos.priceDate] = pos.price;
@@ -215,20 +233,32 @@ export function valueHistory(
       .sort((a, b) => a.date.localeCompare(b.date) || (a.type === "buy" ? -1 : 1));
 
     // Real prices only: daily closes, the prices you traded at, and prices fetched by the app.
+    // Your trade prices are in the instrument's currency; they only fill gaps when the
+    // listing's prices are in that same currency.
+    const priceCurrency = history.currencies?.[symbol] ?? inst.currency;
+    const sameCurrency = priceCurrency === inst.currency;
     const priceSeries: Series = {};
-    for (const t of trades.filter((t) => t.symbol === symbol)) priceSeries[t.date] = t.price;
     const manual = p.prices?.[symbol];
-    if (manual) priceSeries[manual.date] = manual.price;
+    if (sameCurrency) {
+      for (const t of trades.filter((t) => t.symbol === symbol)) priceSeries[t.date] = t.price;
+      if (manual) priceSeries[manual.date] = manual.price;
+    }
     Object.assign(priceSeries, history.prices[symbol]);
     const priceOn = stepLookup(priceSeries);
 
-    const fxSeries: Series = {};
-    if (inst.currency !== "PLN") {
-      for (const t of own) if (t.fxRate) fxSeries[t.date] = t.fxRate;
-      if (manual?.fxRate) fxSeries[manual.date] = manual.fxRate;
-      Object.assign(fxSeries, history.fx[inst.currency]);
-    }
-    const fxOn = inst.currency === "PLN" ? () => 1 : stepLookup(fxSeries);
+    // Exchange rates for the listing's prices, and for trades entered in a foreign currency.
+    const rates = (currency: string, fromTrades: boolean) => {
+      if (currency === "PLN") return () => 1;
+      const series: Series = {};
+      if (fromTrades) {
+        for (const t of own) if (t.fxRate) series[t.date] = t.fxRate;
+        if (manual?.fxRate) series[manual.date] = manual.fxRate;
+      }
+      Object.assign(series, history.fx[currency]);
+      return stepLookup(series);
+    };
+    const fxOn = rates(priceCurrency, sameCurrency);
+    const tradeFxOn = sameCurrency ? fxOn : rates(inst.currency, true);
     if (inst.analizy) notes.push(`${symbol}: drawn from your trade prices and the unit values the app has fetched so far`);
     else if (!history.prices[symbol]) notes.push(`${symbol}: no daily prices yet, drawn from your trade prices`);
 
@@ -238,7 +268,7 @@ export function valueHistory(
     for (const d of dates) {
       for (; next < own.length && own[next].date <= d; next++) {
         const t = own[next];
-        const rate = inst.currency === "PLN" ? 1 : (t.fxRate ?? fxOn(t.date) ?? 0);
+        const rate = inst.currency === "PLN" ? 1 : (t.fxRate ?? tradeFxOn(t.date) ?? 0);
         if (t.type === "buy") {
           lots.push({ qty: t.quantity, costPerShare: (t.quantity * t.price + (t.commission ?? 0)) * rate / t.quantity });
           continue;

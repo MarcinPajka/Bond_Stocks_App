@@ -59,6 +59,25 @@ describe("price history sources", () => {
   });
 });
 
+describe("value over time, ETF bought in złoty", () => {
+  it("prices it in euro at NBP rates and ignores złoty trade prices as quotes", () => {
+    const p: PortfolioFile = {
+      instruments: [{ symbol: "VWCE", currency: "PLN", stooq: "vwce.de" }],
+      trades: [{ symbol: "VWCE", account: "regular", type: "buy", date: "2025-11-18", quantity: 50, price: 654.204 }],
+    };
+    const prices = {
+      prices: { VWCE: { "2025-11-18": 150, "2026-10-16": 170.44 } },
+      currencies: { VWCE: "EUR" },
+      fx: { EUR: { "2025-11-17": 4.23, "2026-10-15": 4.24 } },
+      checkedAt: {},
+    };
+    const h = valueHistory(p, p.trades!, testMarketData(), prices, "2026-10-18");
+    const pts = h.byId["stock:VWCE|regular"];
+    expect(pts[0]).toEqual({ date: "2025-11-18", value: 31725, cost: 32710.2 }); // 50 × 150 € × 4.23
+    expect(pts.at(-1)).toEqual({ date: "2026-10-18", value: 36133.28, cost: 32710.2 }); // 50 × 170.44 € × 4.24
+  });
+});
+
 describe("value over time", () => {
   const p: PortfolioFile = {
     bonds: [{ series: "EDO1035", purchaseDate: "2025-10-15", quantity: 10, account: "regular", redeemedOn: "2026-04-15" }],

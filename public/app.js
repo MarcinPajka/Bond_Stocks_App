@@ -83,6 +83,9 @@ async function loadHistory(refresh = false) {
 }
 
 async function save(next, message) {
+  // Drop instruments nothing refers to any more, e.g. after a mistyped symbol was corrected.
+  const used = new Set([...(next.trades ?? []), ...(next.dividends ?? [])].map((t) => t.symbol));
+  if (next.instruments) next = { ...next, instruments: next.instruments.filter((i) => used.has(i.symbol)) };
   await api("/api/portfolio", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) });
   toast(message);
   state.history = null;
@@ -434,6 +437,7 @@ const ALL_FORMS = ["bond", "trade", "dividend", "redeem", "instrument"];
 $$("select[name=account]").forEach((s) => (s.innerHTML = ACCOUNTS.map((a) => `<option value="${a}">${accountName(a)}</option>`).join("")));
 
 function showForm(name) {
+  if (name === "trade") setTimeout(updatePriceCurrency);
   $$("#formTabs button").forEach((b) => b.classList.toggle("on", b.dataset.form === name));
   ALL_FORMS.forEach((f) => ($(`#form-${f}`).hidden = f !== name));
   $("#formError").textContent = "";
@@ -656,11 +660,19 @@ $("#form-dividend").addEventListener("submit", (e) => {
   submitEntry("dividends", dividend, {}, `Added dividend for ${dividend.symbol}`);
 });
 
+function updatePriceCurrency() {
+  const f = $("#form-trade");
+  const inst = (state.portfolio.instruments ?? []).find((i) => i.symbol === f.elements.symbol.value.trim().toUpperCase());
+  const cur = (inst ? inst.currency : f.elements.currency.value || "PLN").toUpperCase();
+  $("#priceCur").textContent = `(${cur === "PLN" ? "zł" : cur})`;
+}
 $("#form-trade [name=symbol]").addEventListener("input", (e) => {
   const known = (state.portfolio.instruments ?? []).some((i) => i.symbol === e.target.value.trim().toUpperCase());
   $("#newInstrument").hidden = known;
   $("#newInstrument").open = !known && e.target.value.trim().length > 1; // easy to miss when closed
+  updatePriceCurrency();
 });
+$("#form-trade [name=currency]").addEventListener("input", updatePriceCurrency);
 
 // ---------------------------------------------------------------- events
 

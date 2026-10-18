@@ -64,7 +64,7 @@ export function toRows(report: Report, instruments: Instrument[] = [], bondEntri
       assetClass: inst?.analizy ? "Funds" : "Shares & ETFs",
       name: s.symbol,
       detail: inst?.name ?? s.symbol,
-      price: s.price !== undefined ? { value: s.price, currency: inst?.currency ?? "PLN", date: s.priceDate! } : undefined,
+      price: s.price !== undefined ? { value: s.price, currency: s.priceCurrency ?? inst?.currency ?? "PLN", date: s.priceDate! } : undefined,
       account: s.account,
       quantity: +s.quantity.toFixed(4),
       cost: s.costPln,

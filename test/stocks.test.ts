@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildPositions, type Instrument, type Trade } from "../src/stocks/positions.js";
-import { analizyId, fetchFxRate, fetchQuote, parseAnalizyFundPage, parseNbpRates, parseStooqQuote, parseYahooChart } from "../src/prices/providers.js";
+import { analizyId, yahooSymbol, fetchFxRate, fetchQuote, parseAnalizyFundPage, parseNbpRates, parseStooqQuote, parseYahooChart } from "../src/prices/providers.js";
 
 const instruments: Instrument[] = [
   { symbol: "CDR", currency: "PLN" },
@@ -49,6 +49,13 @@ describe("positions", () => {
     expect(() => buildPositions(instruments, [noFx], [], {})).toThrow(/fxRate/);
   });
 
+  it("values a euro-listed ETF bought in złoty at its euro price times the NBP rate", () => {
+    const inst = [{ symbol: "VWCE", currency: "PLN", stooq: "vwce.de" }];
+    const bought: Trade[] = [{ symbol: "VWCE", account: "regular", type: "buy", date: "2025-11-18", quantity: 50, price: 654.204 }];
+    const [p] = buildPositions(inst, bought, [], { VWCE: { price: 170.44, date: "2026-10-16", currency: "EUR", fxRate: 4.24 } });
+    expect(p).toMatchObject({ costPln: 32710.2, valuePln: 36133.28, unrealizedPln: 3423.08, priceCurrency: "EUR" });
+  });
+
   it("charges 19% on dividends with low foreign withholding", () => {
     const d = [{ symbol: "VWCE", account: "regular" as const, date: "2026-01-01", gross: 10, withheldTax: 1.5, fxRate: 4 }];
     const t: Trade[] = [{ symbol: "VWCE", account: "regular", type: "buy", date: "2025-01-01", quantity: 1, price: 100, fxRate: 4 }];
@@ -69,16 +76,37 @@ describe("price sources", () => {
     expect(parseYahooChart(json)).toMatchObject({ price: 141.2, source: "yahoo" });
   });
 
-  it("falls back to Yahoo when stooq has nothing", async () => {
+  it("asks Yahoo first for a listing outside Warsaw, and keeps the price's currency", async () => {
     const urls: string[] = [];
     const get = async (url: string) => {
       urls.push(url);
-      if (url.includes("stooq")) return "Symbol,Date,Time,Open,High,Low,Close,Volume\nVWCE.DE,N/D,N/D,N/D,N/D,N/D,N/D,N/D";
-      return JSON.stringify({ chart: { result: [{ meta: { regularMarketPrice: 140, regularMarketTime: 1791990000 } }] } });
+      return JSON.stringify({ chart: { result: [{ meta: { currency: "EUR", regularMarketPrice: 170.44, regularMarketTime: 1791990000 } }] } });
     };
-    const q = await fetchQuote(instruments[1], get);
-    expect(q.price).toBe(140);
-    expect(urls[1]).toContain("VWCE.DE");
+    const q = await fetchQuote({ symbol: "VWCE", currency: "PLN", stooq: "vwce.de" }, get);
+    expect(q).toMatchObject({ price: 170.44, currency: "EUR" });
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).toContain("/chart/VWCE.DE?");
+  });
+
+  it("tries stooq first for GPW shares, then Yahoo", async () => {
+    const urls: string[] = [];
+    const get = async (url: string) => {
+      urls.push(url);
+      if (url.includes("stooq")) return "Symbol,Date,Time,Open,High,Low,Close,Volume\nCDR,N/D,N/D,N/D,N/D,N/D,N/D,N/D";
+      return JSON.stringify({ chart: { result: [{ meta: { currency: "PLN", regularMarketPrice: 280, regularMarketTime: 1791990000 } }] } });
+    };
+    const q = await fetchQuote({ symbol: "CDR", currency: "PLN" }, get);
+    expect(q.price).toBe(280);
+    expect(urls[0]).toContain("stooq.pl");
+    expect(urls[1]).toContain("/chart/CDR.WA?");
+  });
+
+  it("derives the Yahoo symbol from the stooq one", () => {
+    expect(yahooSymbol({ symbol: "VWCE", currency: "PLN", stooq: "vwce.de" })).toBe("VWCE.DE");
+    expect(yahooSymbol({ symbol: "AAPL", currency: "USD", stooq: "aapl.us" })).toBe("AAPL");
+    expect(yahooSymbol({ symbol: "HSBA", currency: "GBP", stooq: "hsba.uk" })).toBe("HSBA.L");
+    expect(yahooSymbol({ symbol: "CDR", currency: "PLN" })).toBe("CDR.WA");
+    expect(yahooSymbol({ symbol: "X", currency: "EUR", stooq: "x.de", yahoo: "X.F" })).toBe("X.F");
   });
 
   it("takes the NBP rate from the business day before the trade", async () => {
@@ -95,7 +123,7 @@ describe("price sources", () => {
 
   it("reads the PKO DFE unit value from analizy.pl", async () => {
     const html = `<div class="x"><span>28,28</span> PLN</div>\n<p>Aktualna wartość J.U.</p>\n<span>12.10.2026</span><span>0,09 PLN /</span>`;
-    expect(parseAnalizyFundPage(html)).toEqual({ price: 28.28, date: "2026-10-12", source: "analizy.pl" });
+    expect(parseAnalizyFundPage(html)).toEqual({ price: 28.28, date: "2026-10-12", source: "analizy.pl", currency: "PLN" });
     let asked = "";
     const q = await fetchQuote({ symbol: "PKODFE", currency: "PLN", analizy: "EBAN2" }, async (u) => ((asked = u), html));
     expect(q.price).toBe(28.28);

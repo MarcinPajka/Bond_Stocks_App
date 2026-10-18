@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { today, type IsoDate } from "./bonds/dates.js";
 import { emptyBondData, valueLot, type BondData, type BondLot, type BondLotValuation } from "./bonds/lot.js";
 import { cacheData, loadCache, refreshBondData } from "./bonds/refresh.js";
-import { fetchFxRate, fetchQuote } from "./prices/providers.js";
+import { fetchFxRate, fetchQuote, yahooSymbol } from "./prices/providers.js";
 import { buildPositions, type Dividend, type Instrument, type Position, type Quote, type Trade } from "./stocks/positions.js";
 
 export interface PortfolioFile {
@@ -115,12 +115,18 @@ export async function buildReport(p: PortfolioFile, opts: ReportOptions = {}): P
   const dividends = await withFx(p.dividends ?? []);
 
   const quotes: Record<string, Quote | undefined> = {};
-  for (const inst of instruments) {
+  // Only instruments you trade: one left behind after renaming a symbol shouldn't raise warnings.
+  const used = new Set([...trades, ...dividends].map((t) => t.symbol));
+  for (const inst of instruments.filter((i) => used.has(i.symbol))) {
     const manual = p.prices?.[inst.symbol];
     try {
       if (opts.offline) throw new Error("offline");
       const q = await fetchQuote(inst);
-      quotes[inst.symbol] = { price: q.price, date: q.date, fxRate: await fetchFxRate(inst.currency) };
+      const currency = q.currency ?? inst.currency;
+      if (!q.currency && !yahooSymbol(inst).toUpperCase().endsWith(".WA")) {
+        warnings.push(`${inst.symbol}: Yahoo had no price, and stooq's doesn't say its currency, so ${currency} was assumed. Check its Yahoo symbol under "Price source".`);
+      }
+      quotes[inst.symbol] = { price: q.price, date: q.date, currency, fxRate: await fetchFxRate(currency) };
     } catch (e) {
       if (manual) {
         const fxRate = inst.currency === "PLN" ? 1 : manual.fxRate;

@@ -338,3 +338,4 @@ tr.closed .avatar { opacity: .55; }
 @media (max-width: 760px) {
   .detail-grid { grid-template-columns: 1fr; }
 }
+.form .cur { color: var(--muted); font-weight: 400; }

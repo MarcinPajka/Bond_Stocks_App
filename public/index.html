@@ -209,14 +209,14 @@
     </div>
     <div class="row three">
       <label>Quantity<input name="quantity" type="number" step="any" min="0" required></label>
-      <label>Price per unit<input name="price" type="number" step="any" min="0" required></label>
+      <label>Price per unit <span class="cur" id="priceCur"></span><input name="price" type="number" step="any" min="0" required></label>
       <label>Commission<input name="commission" type="number" step="0.01" value="0"></label>
     </div>
     <label>Account<select name="account"></select></label>
     <details id="newInstrument"><summary>New instrument? Tell the app where to find its price</summary>
       <div class="row">
         <label>Name<input name="name" placeholder="CD Projekt"></label>
-        <label>Currency<input name="currency" value="PLN" maxlength="3"></label>
+        <label>You pay in<input name="currency" value="PLN" maxlength="3"><small>PLN if your broker charges you in złoty, even for a foreign ETF</small></label>
       </div>
       <div class="row three">
         <label>stooq symbol<input name="stooq" placeholder="cdr, vwce.de"></label>
@@ -253,7 +253,7 @@
     <p class="sell-head">Where the app gets the price of <b id="instSymbol"></b>. Fill in one source.</p>
     <div class="row">
       <label>Name<input name="name"></label>
-      <label>Currency<input name="currency" maxlength="3" required></label>
+      <label>Your prices are in<input name="currency" maxlength="3" required><small>Currency of the prices you enter, e.g. PLN. The live price's own currency is detected.</small></label>
     </div>
     <label>analizy.pl fund id or link<input name="analizy" placeholder="EBAN2 or https://www.analizy.pl/fundusz/EBAN2/…" autocomplete="off"><small>For funds such as PKO DFE: search the fund on analizy.pl and paste its page link.</small></label>
     <div class="row">

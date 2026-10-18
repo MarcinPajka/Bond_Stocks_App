@@ -11,9 +11,14 @@ import type { IsoDate } from "../bonds/dates.js";
 export interface Instrument {
   symbol: string; // e.g. "CDR", "VWCE"
   name?: string;
-  currency: string; // "PLN", "EUR", ...
+  /**
+   * Currency of the prices you enter for its trades and dividends, e.g. PLN when your
+   * broker charged you in złoty for an ETF listed in euro. The live price is read in the
+   * listing's own currency and converted at the NBP rate.
+   */
+  currency: string;
   stooq?: string; // stooq symbol, default lower-case symbol (GPW)
-  yahoo?: string; // Yahoo symbol, default SYMBOL.WA (GPW)
+  yahoo?: string; // Yahoo symbol, default from the stooq symbol, else SYMBOL.WA (GPW)
   analizy?: string; // analizy.pl fund id for funds priced by unit value, e.g. "EBAN2" (PKO DFE)
 }
 
@@ -38,9 +43,10 @@ export interface Dividend {
 }
 
 export interface Quote {
-  price: number; // instrument currency
+  price: number; // in `currency`
   date: IsoDate;
-  fxRate: number; // PLN per unit now
+  currency?: string; // currency of the listing's price; defaults to the instrument's currency
+  fxRate: number; // PLN per unit of that currency now
 }
 
 export interface Position {
@@ -49,8 +55,9 @@ export interface Position {
   quantity: number;
   costPln: number; // of shares still held, commissions included
   avgCost: number; // per share, PLN
-  price?: number; // instrument currency
+  price?: number; // in priceCurrency
   priceDate?: IsoDate;
+  priceCurrency?: string;
   valuePln?: number;
   unrealizedPln?: number;
   realizedPln: number;
@@ -156,6 +163,7 @@ export function buildPositions(
       Object.assign(position, {
         price: quote?.price,
         priceDate: quote?.date,
+        priceCurrency: quote ? (quote.currency ?? inst.currency) : undefined,
         valuePln,
         unrealizedPln: unrealized,
         gainPln: round2(capitalGain + position.dividendsGrossPln),
